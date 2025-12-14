@@ -1,0 +1,14 @@
+extern const GeoLayout light_shine_geo[];
+extern u8 model__64x64_textures__99__ia16[];
+extern u8 model_rainbow_ring_ci4[];
+extern u8 model_rainbow_ring_pal_rgba16[];
+extern Vtx model_Bone_mesh_layer_5_vtx_0[9];
+extern Gfx model_Bone_mesh_layer_5_tri_0[];
+extern Vtx model_Ring_mesh_layer_5_vtx_0[56];
+extern Gfx model_Ring_mesh_layer_5_tri_0[];
+extern Gfx mat_model_Shine_002[];
+extern Gfx mat_revert_model_Shine_002[];
+extern Gfx mat_model_Ring_001[];
+extern Gfx mat_revert_model_Ring_001[];
+extern Gfx model_Bone_mesh_layer_5[];
+extern Gfx model_Ring_mesh_layer_5[];

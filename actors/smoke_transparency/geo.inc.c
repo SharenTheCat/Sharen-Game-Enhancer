@@ -1,0 +1,17 @@
+// 0x17000038
+const GeoLayout smoke_transparency_geo[] = {
+   GEO_ASM(0, geo_update_layer_transparency),
+   GEO_OPEN_NODE(),
+      GEO_SWITCH_CASE(7, geo_switch_anim_using_action),
+      GEO_OPEN_NODE(),
+         GEO_DISPLAY_LIST(LAYER_TRANSPARENT, smoke_seg4_dl_04021718),
+         GEO_DISPLAY_LIST(LAYER_TRANSPARENT, smoke_seg4_dl_04021730),
+         GEO_DISPLAY_LIST(LAYER_TRANSPARENT, smoke_seg4_dl_04021748),
+         GEO_DISPLAY_LIST(LAYER_TRANSPARENT, smoke_seg4_dl_04021760),
+         GEO_DISPLAY_LIST(LAYER_TRANSPARENT, smoke_seg4_dl_04021778),
+         GEO_DISPLAY_LIST(LAYER_TRANSPARENT, smoke_seg4_dl_04021790),
+         GEO_DISPLAY_LIST(LAYER_TRANSPARENT, smoke_seg4_dl_040217A8),
+      GEO_CLOSE_NODE(),
+   GEO_CLOSE_NODE(),
+   GEO_END(),
+};

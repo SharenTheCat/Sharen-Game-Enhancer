@@ -1,0 +1,10 @@
+extern const GeoLayout ash_pile_geo[];
+extern u8 model_ash_texture_i8[];
+extern Vtx model_Ash_mesh_layer_5_vtx_0[10];
+extern Gfx model_Ash_mesh_layer_5_tri_0[];
+extern Gfx mat_model_Fast3D_Material_layer5[];
+extern Gfx mat_revert_model_Fast3D_Material_layer5[];
+extern Gfx model_Ash_mesh_layer_5[];
+extern Gfx mat_model_Fast3D_Material_layer1[];
+extern Gfx mat_revert_model_Fast3D_Material_layer1[];
+extern Gfx model_Ash_mesh_layer_1[];
