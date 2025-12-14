@@ -1,4 +1,4 @@
--- name: Sharen's Game Enhancer
+-- name: Sharen's Game Enhancer In-Dev [WIP]
 -- description: A total re-do of a mayority of Mario's animations, complete with extra flairs such as open hands, dynamic body movement and more! \n\nAuthor, Code, Animations: Sharen \nDeath Jingle extracted and isolated by eros71 from M&L: SS + BM
 
 -- optimization
