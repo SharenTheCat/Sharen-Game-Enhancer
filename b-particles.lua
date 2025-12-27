@@ -266,18 +266,6 @@ end
 
 ---@param o Object
 local rainbow_spark_loop = function(o)
-    o.oVelX = o.oForwardVel * sins(o.oMoveAngleYaw) * coss(o.oMoveAnglePitch)
-    o.oVelY = o.oForwardVel * sins(o.oMoveAnglePitch)
-    o.oVelZ = o.oForwardVel * coss(o.oMoveAngleYaw) * coss(o.oMoveAnglePitch)
-
-    o.oFloorHeight = find_floor_height(o.oPosX, o.oPosY, o.oPosZ)
-
-    obj_move_xyz(o, o.oVelX, o.oVelY, o.oVelZ)
-
-    o.oPosY = math.max(o.oPosY, o.oFloorHeight + 20)
-
-    o.oForwardVel = math.max(o.oForwardVel - 4, 0)
-
     if o.oTimer & 1 ~= 0 then
         o.oAnimState = o.oAnimState + 1
     end
@@ -1033,23 +1021,29 @@ local spawn_step_particles = function(m)
     end
 end
 
----@param m MarioState
-local spawn_frame_perfect_particles = function(m, isWallJump)
+local spawn_frame_perfect_particles = function()
     if not gSGOLocalSettings.framePerfectEffect then return end
-    local e = gMarioEnhance[m.playerIndex]
-    local offset = isWallJump and 80 or 20
-    local maxParticles = 3
+    local m = gMarioStates[0]
 
-    for i = 0, maxParticles - 1 do
-        spawn_non_sync_object(id_bhvRainbowSpark, E_MODEL_RAINBOW_SPARKLE, m.pos.x, m.pos.y + offset, m.pos.z, function(o)
-            o.oMoveAngleYaw = isWallJump and m.faceAngle.y + deg_to_hex(90) or particle_spawn_circle(i, maxParticles, 45)
+    if sSpawnAfterImage then
+        if get_global_timer() & 1 == 0 then
+            local index = #gAfterImageData + 1
 
-            o.oMoveAnglePitch = isWallJump and particle_spawn_circle(i, maxParticles, 45) or obj_get_slope(o)
+            init_afterimage(index)
+            spawn_non_sync_object(id_bhvAfterImage, obj_get_model_id_extended(m.marioObj), m.pos.x, m.pos.y, m.pos.z, function(o)
+                o.oBehParams = index
+                o.globalPlayerIndex = gNetworkPlayers[0].globalIndex
+            end)
+        end
+        if get_global_timer() & 4 == 0 then
+            local xOffset = math.random(-30, 30)
+            local yOffset = math.random(0, 125)
+            local zOffset = math.random(-30, 30)
 
-            o.oForwardVel = random_float() * 6 + 18
-
-            obj_scale_random(o, 0.2, 0.5)
-        end)
+            spawn_non_sync_object(id_bhvRainbowSpark, E_MODEL_RAINBOW_SPARKLE, m.pos.x + xOffset, m.pos.y + yOffset, m.pos.z + zOffset, function(o)
+                obj_scale(o, 0.5 + 0.25 * random_float())
+            end)
+        end
     end
 end
 
@@ -1225,20 +1219,6 @@ local spawn_powerup_particles_and_sounds = function(m)
     end
 end
 
-local spawn_afterimages = function()
-    local m = gMarioStates[0]
-
-    if sSpawnAfterImage and get_global_timer() & 1 == 0 then
-        local index = #gAfterImageData + 1
-
-        init_afterimage(index)
-        spawn_non_sync_object(id_bhvAfterImage, obj_get_model_id_extended(m.marioObj), m.pos.x, m.pos.y, m.pos.z, function(o)
-            o.oBehParams = index
-            o.globalPlayerIndex = gNetworkPlayers[0].globalIndex
-        end)
-    end
-end
-
 sFramePerfect = 0
 
 ---@param m MarioState
@@ -1269,8 +1249,7 @@ spawn_particles_on_set_act = function(m)
 
     if m.action == ACT_WALL_KICK_AIR then
         if m.prevAction == ACT_AIR_HIT_WALL then
-            sSpawnAfterImage = true
-            spawn_frame_perfect_particles(m, true) -- firsties
+            sSpawnAfterImage = true -- firsties
         end
     end
 
@@ -1278,7 +1257,6 @@ spawn_particles_on_set_act = function(m)
         if sFramePerfect == 1 then
             sSpawnAfterImage = true
             e.animState = 64
-            spawn_frame_perfect_particles(m, false)
         end
     end
 
@@ -1297,7 +1275,7 @@ spawn_particles_before_update = function(m)
         spawnedDustTimer = spawnedDustTimer - 1
     end
     restore_body_state(m)
-    spawn_afterimages()
+    spawn_frame_perfect_particles()
 end
 
 hook_event(HOOK_ON_OBJECT_RENDER, render_afterimage)

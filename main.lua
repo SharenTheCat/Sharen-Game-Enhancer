@@ -905,10 +905,6 @@ local mario_update = function(m)
             drop_and_set_mario_action(m, m.area.terrainType & TERRAIN_MASK == TERRAIN_SNOW and ACT_FROZEN or ACT_BURNT, 0)
         end
 
-        if m.controller.buttonDown & Y_BUTTON ~= 0 then
-            m.vel.y = 10
-        end
-
         local globalTimer = get_global_timer()
         -- only run this every once in a while for optimization, its not that necessary
         if math_fmod(globalTimer, 30) == 0 and (gSGOLocalSettings.sleepyMusic or sSleepMusic) then
