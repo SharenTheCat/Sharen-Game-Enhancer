@@ -126,7 +126,7 @@ local handle_death_text = function()
             if gSGOLocalSettings.deadBuzz then
                 audio_sample_play(SOUND_DEATH_BUZZ, c.pos, 0.5)
             end
-            spawn_non_sync_object(id_bhvSpotlight, E_MODEL_SPOTLIGHT, m.pos.x, m.pos.y + 1100, m.pos.z, function(o)
+            spawn_non_sync_object(id_bhvSpotlight, E_MODEL_SPOTLIGHT, m.pos.x, m.pos.y + 750, m.pos.z, function(o)
                 o.globalPlayerIndex = m.marioObj.globalPlayerIndex
             end)
             sPlayedBuzz = true
@@ -278,6 +278,41 @@ end
 handle_scenematics = function()
     handle_death_text()
     handle_star_env_effects()
+end
+
+cam_test = function()
+    local m = gMarioStates[0]
+    local c = m.area.camera
+    local l = gLakituState
+    local camPos = {x = 0, y = 0, z = 0}
+    local focusPos = {x = 0, y = 0, z = 0}
+    local camDist = 560
+    local camYaw = m.faceAngle.y
+    local camSide = math.s16(camYaw + 0x4000)
+    local offset = 100 * math.sin(get_global_timer() * 0.04)
+
+    if not c then return end
+
+    if c.cutscene == 250 then
+        camPos = {
+            x = m.pos.x + camDist * sins(camYaw) - offset * sins(camSide),
+            y = m.pos.y + 120,
+            z = m.pos.z + camDist * coss(camYaw) - offset * coss(camSide),
+        }
+        focusPos = {
+            x = m.pos.x + offset * sins(camSide),
+            y = m.pos.y + 120,
+            z = m.pos.z + offset * coss(camSide),
+        }
+
+        vec3f_copy(c.pos, camPos)
+        vec3f_copy(l.pos, camPos)
+        vec3f_copy(l.goalPos, camPos)
+
+        vec3f_copy(c.focus, focusPos)
+        vec3f_copy(l.focus, focusPos)
+        vec3f_copy(l.goalFocus, focusPos)
+    end
 end
 
 hook_event(HOOK_ON_DEATH, function(m)

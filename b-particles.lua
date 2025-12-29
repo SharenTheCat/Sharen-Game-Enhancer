@@ -270,8 +270,8 @@ local rainbow_spark_loop = function(o)
         o.oAnimState = o.oAnimState + 1
     end
 
-    if o.oForwardVel <= 0 then
-        obj_scale(o, o.header.gfx.scale.x - 0.1)
+    if o.oTimer >= 3 then
+        obj_scale(o, o.header.gfx.scale.x - 0.08)
         if o.header.gfx.scale.x <= 0 then
             obj_mark_for_deletion(o)
         end
@@ -525,9 +525,10 @@ end
 
 id_bhvAshPile = hook_behavior(nil, OBJ_LIST_UNIMPORTANT, false, ash_pile_init, ash_pile_loop)
 
-local SPOTLIGHT_LIGHT_OFFSET = 175
-local SPOTLIGHT_LIGHT_RADIUS = 220
-local SPOTLIGHT_LIGHT_MAX_OPACITY = 0xA6
+local SPOTLIGHT_MAX_DIST = 1080
+local SPOTLIGHT_LIGHT_MAX_OFFSET = 175
+local SPOTLIGHT_LIGHT_RADIUS = 160
+local SPOTLIGHT_LIGHT_MAX_OPACITY = 0x92
 
 gSpotlightLightID = nil
 
@@ -536,9 +537,12 @@ local spotlight_init = function(o)
     local m = gMarioStates[network_local_index_from_global(o.parentObj.globalPlayerIndex)]
     local mPos = m.pos
 
+    obj_scale(o, 1.8)
+    spawn_mist_particles()
+
     o.oFlags = OBJ_FLAG_UPDATE_GFX_POS_AND_ANGLE
-    o.oLightID = le_add_light(mPos.x, mPos.y + SPOTLIGHT_LIGHT_OFFSET, mPos.z, 0xFF, 0xFE, 0xCB, SPOTLIGHT_LIGHT_RADIUS, 4)
-    gSpotlightLightID = o.oLightID
+    o.oGraphYOffset = 40
+    gSpotlightLightID = le_add_light(mPos.x, mPos.y + SPOTLIGHT_LIGHT_MAX_OFFSET, mPos.z, 0xFF, 0xFE, 0xCB, SPOTLIGHT_LIGHT_RADIUS, 2.5)
     o.header.gfx.skipInViewCheck = true
 end
 
@@ -559,38 +563,62 @@ local spotlight_loop = function(o)
     local hipo = math.sqrt(xDif ^ 2 + zDif ^ 2)
 
     o.oFaceAngleYaw = atan2s(zDif, xDif)
-    o.oFaceAnglePitch = atan2s(hipo, -mPos.y + o.oPosY) - deg_to_hex(90)
+    o.oAngleVelPitch = atan2s(hipo, (mPos.y + 80) - (o.oPosY + o.oGraphYOffset))
 
-    local yaw = math.s16(o.oFaceAngleYaw - deg_to_hex(180))
-    local pitch = math.s16(o.oFaceAnglePitch + deg_to_hex(90))
-
-    local offset = {
-        x = SPOTLIGHT_LIGHT_OFFSET * sins(yaw) * coss(pitch),
-        y = SPOTLIGHT_LIGHT_OFFSET * sins(pitch),
-        z = SPOTLIGHT_LIGHT_OFFSET * coss(yaw) * coss(pitch),
-    }
+    local yaw = math.s16(o.oFaceAngleYaw)
+    local pitch = math.s16(o.oAngleVelPitch - 0x8000)
 
     local dist = vec3f_dist(o.header.gfx.pos, mPos)
 
-    o.header.gfx.scale.x = 1 + dist / 750
-    o.header.gfx.scale.y = 1 + dist / 220
-    o.header.gfx.scale.z = 1 + dist / 750
+    if dist > SPOTLIGHT_MAX_DIST then
+        local excess = SPOTLIGHT_MAX_DIST - dist
+        o.oPosX = o.oPosX + excess * sins(yaw) * coss(pitch)
+        o.oPosY = o.oPosY + excess * sins(pitch)
+        o.oPosZ = o.oPosZ + excess * coss(yaw) * coss(pitch)
+    end
 
-    o.oOpacity = (SPOTLIGHT_LIGHT_MAX_OPACITY + 0x28 * math.sin(get_global_timer() * 0.04)) * math.max(1 - gLightDarken, 0)
+    local offsetValue = math.min(dist, SPOTLIGHT_LIGHT_MAX_OFFSET)
 
-    if o.oLightID then
-        le_set_light_pos(o.oLightID, mPos.x + offset.x, mPos.y + offset.y, mPos.z + offset.z)
-        le_set_light_radius(o.oLightID, SPOTLIGHT_LIGHT_RADIUS * (1 + dist / 1250))
-        le_set_light_intensity(o.oLightID, o.oOpacity / (SPOTLIGHT_LIGHT_MAX_OPACITY * 0.5))
+    local offset = {
+        x = offsetValue * sins(yaw) * coss(pitch),
+        y = offsetValue * sins(pitch),
+        z = offsetValue * coss(yaw) * coss(pitch),
+    }
+
+    o.oBowserKeyScale = dist / 400
+    o.oOpacity = (SPOTLIGHT_LIGHT_MAX_OPACITY + 0x16 * math.sin(get_global_timer() * 0.04)) * math.max(1 - gLightDarken, 0)
+
+    if gSpotlightLightID then
+        le_set_light_pos(gSpotlightLightID, mPos.x + offset.x, mPos.y + offset.y, mPos.z + offset.z)
+        le_set_light_radius(gSpotlightLightID, SPOTLIGHT_LIGHT_RADIUS * (dist / 400))
+        le_set_light_intensity(gSpotlightLightID, o.oOpacity / (SPOTLIGHT_LIGHT_MAX_OPACITY * 0.45))
     end
 
     if m.health > 0xFF and gDeathActs[m.action] == nil then
         obj_mark_for_deletion(o)
-        if o.oLightID then
-            le_remove_light(o.oLightID)
+        if gSpotlightLightID then
+            le_remove_light(gSpotlightLightID)
         end
         gSpotlightLightID = nil
     end
+end
+
+geo_spotlight_rotate = function(node, matStackIndex)
+    local o = geo_get_current_object()
+    local rotN = cast_graph_node(node.next) ---@type GraphNodeScale
+
+    rotN.rotation.z = o.oAngleVelPitch
+
+    return
+end
+
+geo_spotlight_ray_scale = function(node, matStackIndex)
+    local o = geo_get_current_object()
+    local scaleN = cast_graph_node(node.next) ---@type GraphNodeScale
+
+    scaleN.scale = o.oBowserKeyScale
+
+    return
 end
 
 id_bhvSpotlight = hook_behavior(nil, OBJ_LIST_UNIMPORTANT, false, spotlight_init, spotlight_loop)
@@ -706,7 +734,7 @@ local render_afterimage = function(o)
     mBody.capState = ai.cap
 
     local transparencyMult = 1 - ease_in(o.oTimer / AFTERIMAGE_DURATION, 2)
-    if ai.model & MODEL_STATE_NOISE_ALPHA == 0 then
+    if ai.model & 0x100 == 0 then
         mBody.modelState = ai.model + 0x100 + 0xFF * transparencyMult
     else
         local flags = ai.model & MODEL_STATE_METAL ~= 0 and (0x100 | MODEL_STATE_METAL) or 0x100
@@ -1035,9 +1063,9 @@ local spawn_frame_perfect_particles = function()
                 o.globalPlayerIndex = gNetworkPlayers[0].globalIndex
             end)
         end
-        if get_global_timer() & 4 == 0 then
+        if get_global_timer() & 5 == 0 then
             local xOffset = math.random(-30, 30)
-            local yOffset = math.random(0, 125)
+            local yOffset = 100 * random_float()
             local zOffset = math.random(-30, 30)
 
             spawn_non_sync_object(id_bhvRainbowSpark, E_MODEL_RAINBOW_SPARKLE, m.pos.x + xOffset, m.pos.y + yOffset, m.pos.z + zOffset, function(o)

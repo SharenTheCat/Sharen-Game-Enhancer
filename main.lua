@@ -905,6 +905,12 @@ local mario_update = function(m)
             drop_and_set_mario_action(m, m.area.terrainType & TERRAIN_MASK == TERRAIN_SNOW and ACT_FROZEN or ACT_BURNT, 0)
         end
 
+        if m.controller.buttonDown & Y_BUTTON ~= 0 then
+            m.area.camera.cutscene = 250
+        elseif m.area.camera.cutscene == 250 then
+            m.area.camera.cutscene = 0
+        end
+
         local globalTimer = get_global_timer()
         -- only run this every once in a while for optimization, its not that necessary
         if math_fmod(globalTimer, 30) == 0 and (gSGOLocalSettings.sleepyMusic or sSleepMusic) then
@@ -1100,6 +1106,7 @@ end)
 
 hook_event(HOOK_UPDATE, function()
     handle_scenematics()
+    cam_test()
     gTalkPrompt = false
 end)
 
