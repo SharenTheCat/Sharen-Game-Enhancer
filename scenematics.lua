@@ -1,163 +1,3 @@
-local sPlayedBuzz = false
-
-local SOUND_DEATH_BUZZ = audio_sample_load("death_buzz.mp3")
-
-local sHasModHiddenHud = false
-
-gDeathActs = {
-    [ACT_STANDING_DEATH] = function(m)
-        if gPlayerSyncTable[0].newAnims then
-            return m.marioObj.header.gfx.animInfo.animFrame >= 110
-        else 
-            return m.marioObj.header.gfx.animInfo.animFrame >= 90
-        end
-    end,
-    [ACT_DEATH_ON_BACK] = function(m)
-        return m.marioObj.header.gfx.animInfo.animFrame >= 62
-    end,
-    [ACT_DEATH_ON_STOMACH] = function(m)
-        return is_anim_at_end(m) ~= 0
-    end,
-    [ACT_DROWNING] = function(m)
-        return m.marioObj.header.gfx.animInfo.animID == CHAR_ANIM_DROWNING_PART2 and
-        m.marioObj.header.gfx.animInfo.animFrame >= m.marioObj.header.gfx.animInfo.curAnim.loopEnd * 0.25
-    end,
-    [ACT_WATER_DEATH] = function(m)
-        return is_anim_at_end(m) ~= 0
-    end,
-    [ACT_CAUGHT_IN_WHIRLPOOL] = function(m)
-        return m.actionTimer >= 16
-    end,
-    [ACT_SUFFOCATION] = function(m)
-        return is_anim_at_end(m) ~= 0
-    end,
-    [ACT_ELECTROCUTION] = function(m)
-        return is_anim_at_end(m) ~= 0
-    end,
-    [ACT_QUICKSAND_DEATH] = function(m)
-        return is_anim_at_end(m) ~= 0
-    end,
-    [ACT_EATEN_BY_BUBBA] = function(m)
-        return true
-    end,
-    [ACT_INTO_ABYSS] = function(m)
-        return m.actionTimer >= 45
-    end,
-    [ACT_FROZEN_WATER] = function(m)
-        return m.actionTimer >= 45
-    end,
-    [ACT_FROZEN] = function(m)
-        return m.actionTimer >= 65
-    end,
-    [ACT_BURNT] = function(m)
-        return m.actionState >= 2 and m.actionTimer >= 20
-    end
-}
-
-local sSpecialSpotlightTriggers = {
-    [ACT_STANDING_DEATH] = function(m)
-        return m.marioObj.header.gfx.animInfo.animFrame >= 62
-    end,
-    [ACT_DEATH_ON_BACK] = function(m)
-        return m.marioObj.header.gfx.animInfo.animFrame >= 20
-    end,
-    [ACT_DEATH_ON_STOMACH] = function(m)
-        return m.marioObj.header.gfx.animInfo.animFrame >= 22
-    end,
-    [ACT_DROWNING] = function(m)
-        return m.marioObj.header.gfx.animInfo.animID == CHAR_ANIM_DROWNING_PART2 or m.marioObj.header.gfx.animInfo.animFrame >= 70
-    end,
-    [ACT_SQUISHED] = function(m)
-        return m.actionState == 2 or (m.actionArg >= 300 and not gSGOLocalSettings.miscThings)
-    end,
-    [ACT_INTO_ABYSS] = function(m)
-        return false
-    end,
-    [ACT_FROZEN_WATER] = function(m)
-        return m.actionTimer >= 25
-    end,
-    [ACT_BURNT] = function(m)
-        return m.actionState >= 1
-    end,
-}
-
-local emphazasise_death = function()
-    local m = gMarioStates[0]
-    if sSpecialSpotlightTriggers[m.action] then
-        return switch(m.action, sSpecialSpotlightTriggers, m)
-    elseif gDeathActs[m.action] then
-        return true
-    end
-    return false
-end
-
-local handle_death_text = function()
-    local m = gMarioStates[0]
-    local c = gLakituState
-    local prevPos = m.pos.y
-    local prevYVel = m.vel.y
-    local canBubble = (mario_can_bubble(m) and m.numLives > 0) or m.action == ACT_BUBBLED
-    local tooBad = gSGOLocalSettings.deathScene == 1
-    local bubba
-
-    if m.action == ACT_EATEN_BY_BUBBA then
-        bubba = obj_get_nearest_object_with_behavior_id(m.marioObj, id_bhvBubba)
-    end
-
-    local focus = bubba and bubba.header.gfx.pos or m.marioObj.header.gfx.pos
-
-    if gDeathActs[m.action] or (m.health - 64 * m.hurtCounter < 0x100 and m.action ~= ACT_BUBBLED) then
-        c.posHSpeed = 0
-        c.posVSpeed = 0
-        vec3f_copy(c.curFocus, focus)
-        if m.area.camera then
-            m.area.camera.cutscene = 0
-        end
-        if not canBubble and tooBad then
-            fade_volume_scale(0, 0, 30)
-        end
-    end
-
-    if (m.health <= 0xFF or gDeathActs[m.action]) then
-        if not sPlayedBuzz then
-            if not canBubble and tooBad then
-                hud_hide()
-            end
-            if gSGOLocalSettings.deadBuzz then
-                audio_sample_play(SOUND_DEATH_BUZZ, c.pos, 0.5)
-            end
-            spawn_non_sync_object(id_bhvSpotlight, E_MODEL_SPOTLIGHT, m.pos.x, m.pos.y + 750, m.pos.z, function(o)
-                o.globalPlayerIndex = m.marioObj.globalPlayerIndex
-            end)
-            sPlayedBuzz = true
-        end
-
-        if emphazasise_death() then
-            gLightDarken = clamp(gLightDarken - 0.05, 0.1, 1)
-        end
-
-    elseif m.health > 0xFF and not gDeathActs[m.action] and sPlayedBuzz then
-        if not sHasModHiddenHud then
-            hud_show()
-        end
-        sPlayedBuzz = false
-        gLightDarken = 1
-    end
-
-    if (switch(m.action, gDeathActs, m) or (m.action == ACT_SQUISHED and m.actionTimer >= 30)) and not canBubble and tooBad then
-        if gDeathTextTimer == 0 then
-            gDeathTextTimer = 1
-        end
-
-        if gDeathTextTimer >= DEATH_TEXT_DURATION and m.action ~= ACT_INTO_ABYSS and m.action ~= ACT_FROZEN_WATER and m.action ~= ACT_BURNT then
-            common_death_handler(m, m.marioObj.header.gfx.animInfo.animID, m.marioObj.header.gfx.animInfo.animFrame)
-            m.vel.y = prevYVel
-            m.pos.y = prevPos
-            m.marioObj.header.gfx.pos.y = prevPos - m.quicksandDepth
-        end
-    end
-end
-
 local SOUND_CUSTOM_STAR_ENV = audio_sample_load("star_twinkle.mp3")
 local STAR_SOUND_DURATION = math.floor(1.2 * 30)
 local sSoundTimer = 0
@@ -275,44 +115,321 @@ local handle_star_env_effects = function()
     end
 end
 
-handle_scenematics = function()
-    handle_death_text()
-    handle_star_env_effects()
+local sPlayedBuzz = false
+
+local SOUND_DEATH_BUZZ = audio_sample_load("death_buzz.mp3")
+
+local sHasModHiddenHud = false
+
+gDeathActs = {
+    [ACT_STANDING_DEATH] = function(m)
+        if gPlayerSyncTable[0].newAnims then
+            return m.marioObj.header.gfx.animInfo.animFrame >= 110
+        else 
+            return m.marioObj.header.gfx.animInfo.animFrame >= 90
+        end
+    end,
+    [ACT_DEATH_ON_BACK] = function(m)
+        return m.marioObj.header.gfx.animInfo.animFrame >= 62
+    end,
+    [ACT_DEATH_ON_STOMACH] = function(m)
+        return is_anim_at_end(m) ~= 0
+    end,
+    [ACT_DROWNING] = function(m)
+        return m.marioObj.header.gfx.animInfo.animID == CHAR_ANIM_DROWNING_PART2 and
+        m.marioObj.header.gfx.animInfo.animFrame >= m.marioObj.header.gfx.animInfo.curAnim.loopEnd * 0.25
+    end,
+    [ACT_WATER_DEATH] = function(m)
+        return is_anim_at_end(m) ~= 0
+    end,
+    [ACT_CAUGHT_IN_WHIRLPOOL] = function(m)
+        return m.actionTimer >= 16
+    end,
+    [ACT_SUFFOCATION] = function(m)
+        return is_anim_at_end(m) ~= 0
+    end,
+    [ACT_ELECTROCUTION] = function(m)
+        return is_anim_at_end(m) ~= 0
+    end,
+    [ACT_QUICKSAND_DEATH] = function(m)
+        return is_anim_at_end(m) ~= 0
+    end,
+    [ACT_EATEN_BY_BUBBA] = function(m)
+        return true
+    end,
+    [ACT_INTO_ABYSS] = function(m)
+        return m.actionTimer >= 45
+    end,
+    [ACT_FROZEN_WATER] = function(m)
+        return m.actionTimer >= 45
+    end,
+    [ACT_FROZEN] = function(m)
+        return m.actionTimer >= 65
+    end,
+    [ACT_BURNT] = function(m)
+        return m.actionState >= 2 and m.actionTimer >= 20
+    end
+}
+
+local sSpecialSpotlightTriggers = {
+    [ACT_STANDING_DEATH] = function(m)
+        return m.marioObj.header.gfx.animInfo.animFrame >= 62
+    end,
+    [ACT_DEATH_ON_BACK] = function(m)
+        return m.marioObj.header.gfx.animInfo.animFrame >= 20
+    end,
+    [ACT_DEATH_ON_STOMACH] = function(m)
+        return m.marioObj.header.gfx.animInfo.animFrame >= 22
+    end,
+    [ACT_DROWNING] = function(m)
+        return m.marioObj.header.gfx.animInfo.animID == CHAR_ANIM_DROWNING_PART2 or m.marioObj.header.gfx.animInfo.animFrame >= 70
+    end,
+    [ACT_SQUISHED] = function(m)
+        return m.actionState == 2 or (m.actionArg >= 300 and not gSGOLocalSettings.miscThings)
+    end,
+    [ACT_INTO_ABYSS] = function(m)
+        return false
+    end,
+    [ACT_FROZEN_WATER] = function(m)
+        return m.actionTimer >= 25
+    end,
+    [ACT_BURNT] = function(m)
+        return m.actionState >= 1
+    end,
+}
+
+local emphazasise_death = function()
+    local m = gMarioStates[0]
+    if sSpecialSpotlightTriggers[m.action] then
+        return switch(m.action, sSpecialSpotlightTriggers, m)
+    elseif gDeathActs[m.action] then
+        return true
+    end
+    return false
 end
+
+local handle_death_text = function()
+    local m = gMarioStates[0]
+    local c = gLakituState
+    local prevPos = m.pos.y
+    local prevYVel = m.vel.y
+    local canBubble = (mario_can_bubble(m) and m.numLives > 0) or m.action == ACT_BUBBLED
+    local tooBad = gSGOLocalSettings.deathScene == 1
+    local bubba
+
+    if m.action == ACT_EATEN_BY_BUBBA then
+        bubba = obj_get_nearest_object_with_behavior_id(m.marioObj, id_bhvBubba)
+    end
+
+    local focus = bubba and bubba.header.gfx.pos or m.marioObj.header.gfx.pos
+
+    if gDeathActs[m.action] or (m.health - 64 * m.hurtCounter < 0x100 and m.action ~= ACT_BUBBLED) then
+        if not canBubble and tooBad then
+            fade_volume_scale(0, 0, 30)
+        end
+    end
+
+    if (m.health <= 0xFF or gDeathActs[m.action]) then
+        if not sPlayedBuzz then
+            if not canBubble and tooBad then
+                hud_hide()
+            end
+            if gSGOLocalSettings.deadBuzz then
+                audio_sample_play(SOUND_DEATH_BUZZ, c.pos, 0.5)
+            end
+            spawn_non_sync_object(id_bhvSpotlight, E_MODEL_SPOTLIGHT, m.pos.x, m.pos.y + 520, m.pos.z, function(o)
+                o.globalPlayerIndex = m.marioObj.globalPlayerIndex
+            end)
+            sPlayedBuzz = true
+        end
+
+        if emphazasise_death() then
+            gLightDarken = clamp(gLightDarken - 0.05, 0.1, 1)
+        end
+
+    elseif m.health > 0xFF and not gDeathActs[m.action] and sPlayedBuzz then
+        if not sHasModHiddenHud then
+            hud_show()
+        end
+        sPlayedBuzz = false
+        gLightDarken = 1
+    end
+
+    if (switch(m.action, gDeathActs, m) or (m.action == ACT_SQUISHED and m.actionTimer >= 30)) and not canBubble and tooBad then
+        if gDeathTextTimer == 0 then
+            gDeathTextTimer = 1
+        end
+
+        if gDeathTextTimer >= DEATH_TEXT_DURATION and m.action ~= ACT_INTO_ABYSS and m.action ~= ACT_FROZEN_WATER and m.action ~= ACT_BURNT then
+            common_death_handler(m, m.marioObj.header.gfx.animInfo.animID, m.marioObj.header.gfx.animInfo.animFrame)
+            m.vel.y = prevYVel
+            m.pos.y = prevPos
+            m.marioObj.header.gfx.pos.y = prevPos - m.quicksandDepth
+        end
+    end
+end
+
+sCamPos = {x = 0, y = 0, z = 0}
+sFocusPos = {x = 0, y = 0, z = 0}
+sCamDist = 0
+sCamYaw = 0
+sCamPitch = 0
+sMoveDivisor = 1
+
+sSGOCutsceneDuration = 0
+local sMaxDuration = 0
+
+local sGoalCamDist = 0
+local sGoalCamYaw = 0
+local sGoalCamPitch = 0
+local sGoalFocusPos = {x = 0, y = 0, z = 0}
+
+local vec3f_approach_asymptotic = function(current, goal, mult)
+    current.x = approach_f32_asymptotic(current.x, goal.x, mult)
+    current.y = approach_f32_asymptotic(current.y, goal.y, mult)
+    current.z = approach_f32_asymptotic(current.z, goal.z, mult)
+end
+
+local set_cam_pos = function(x, y, z)
+    sCamPos.x = x
+    sCamPos.y = y
+    sCamPos.z = z
+end
+
+local cam_orbit = function()
+    set_cam_pos(sFocusPos.x + sCamDist * sins(s16(sCamYaw + 0x8000)) * coss(sCamPitch),
+    sFocusPos.y + sCamDist * sins(sCamPitch),
+    sFocusPos.z + sCamDist * coss(s16(sCamYaw + 0x8000)) * coss(sCamPitch))
+end
+
+local set_focus_pos = function(x, y, z)
+    sFocusPos.x = x
+    sFocusPos.y = y
+    sFocusPos.z = z
+end
+
+local set_goal_focus_pos = function(x, y, z)
+    sGoalFocusPos.x = x
+    sGoalFocusPos.y = y
+    sGoalFocusPos.z = z
+end
+
+sDeathCutscenes = {
+    [ACT_STANDING_DEATH] = function(m)
+        local ZOOM_IN = 78
+        sMaxDuration = 110
+
+        sMoveDivisor = 9.2
+        sGoalCamYaw = m.faceAngle.y + deg_to_hex(145)
+
+        if sSGOCutsceneDuration < ZOOM_IN then
+            sGoalCamDist = 400
+            sGoalCamPitch = deg_to_hex(-6)
+
+            set_goal_focus_pos(m.pos.x, m.pos.y + 80, m.pos.z)
+
+            sCamDist = approach_f32_asymptotic(sCamDist, sGoalCamDist, 1 / sMoveDivisor)
+            sCamPitch = approach_s16_asymptotic(sCamPitch, sGoalCamPitch, sMoveDivisor)
+            vec3f_approach_asymptotic(sFocusPos, sGoalFocusPos, 1 / sMoveDivisor)
+        else
+            sGoalCamDist = 320
+            sGoalCamPitch = deg_to_hex(8)
+
+            set_goal_focus_pos(m.pos.x, m.pos.y + 60, m.pos.z)
+
+            local t = ease_in_out_quad((sSGOCutsceneDuration - ZOOM_IN) / (sMaxDuration - ZOOM_IN))
+
+            sCamDist = lerp(400, sGoalCamDist, t)
+            sCamPitch = lerp(deg_to_hex(-6), sGoalCamPitch, t)
+
+            sFocusPos.y = lerp(m.pos.y + 80, sGoalFocusPos.y, t)
+        end
+
+        sCamYaw = approach_s16_asymptotic(sCamYaw, sGoalCamYaw, sMoveDivisor)
+
+        cam_orbit()
+
+        set_handheld_shake(HAND_CAM_SHAKE_STAR_DANCE)
+    end,
+    [ACT_DEATH_ON_BACK] = function(m)
+        sMaxDuration = 80
+
+        if sSGOCutsceneDuration < 10 then
+            sCamDist = 170
+            sCamYaw = m.faceAngle.y + deg_to_hex(265)
+            sCamPitch = deg_to_hex(2)
+
+            cam_orbit()
+            sCamPos.y = sCamPos.y + 20
+        elseif sSGOCutsceneDuration < 49 then
+            sMoveDivisor = 48
+            sGoalCamDist = 480
+            sGoalCamYaw = m.faceAngle.y + deg_to_hex(185)
+            sGoalCamPitch = deg_to_hex(42)
+
+            sCamDist = approach_f32_asymptotic(sCamDist, sGoalCamDist, 1 / sMoveDivisor)
+            sCamYaw = approach_s16_asymptotic(sCamYaw, sGoalCamYaw, sMoveDivisor)
+            sCamPitch = approach_s16_asymptotic(sCamPitch, sGoalCamPitch, sMoveDivisor)
+
+            cam_orbit()
+        else
+            sMoveDivisor = 24
+            sGoalCamDist = 1400
+            sGoalCamPitch = deg_to_hex(82)
+
+            sCamDist = math.min(sCamDist + 1.8, sGoalCamDist)
+            sCamYaw = s16(sCamYaw - deg_to_hex(0.25))
+            sCamPitch = approach_s16_asymptotic(sCamPitch, sGoalCamPitch, sMoveDivisor)
+            cam_orbit()
+        end
+
+        set_focus_pos(m.pos.x, m.pos.y + 20, m.pos.z)
+    end,
+}
 
 cam_test = function()
     local m = gMarioStates[0]
     local c = m.area.camera
     local l = gLakituState
-    local camPos = {x = 0, y = 0, z = 0}
-    local focusPos = {x = 0, y = 0, z = 0}
-    local camDist = 560
-    local camYaw = m.faceAngle.y
-    local camSide = math.s16(camYaw + 0x4000)
-    local offset = 100 * math.sin(get_global_timer() * 0.04)
 
     if not c then return end
 
-    if c.cutscene == 250 then
-        camPos = {
-            x = m.pos.x + camDist * sins(camYaw) - offset * sins(camSide),
-            y = m.pos.y + 120,
-            z = m.pos.z + camDist * coss(camYaw) - offset * coss(camSide),
-        }
-        focusPos = {
-            x = m.pos.x + offset * sins(camSide),
-            y = m.pos.y + 120,
-            z = m.pos.z + offset * coss(camSide),
-        }
+    sCamDist = vec3f_dist(c.focus, c.pos)
+    sCamYaw = angle_to_point(c.pos, c.focus)
+    sCamPitch = pitch_to_point(c.pos, c.focus)
 
-        vec3f_copy(c.pos, camPos)
-        vec3f_copy(l.pos, camPos)
-        vec3f_copy(l.goalPos, camPos)
+    sFocusPos = {
+        x = c.focus.x,
+        y = c.focus.y,
+        z = c.focus.z,
+    }
 
-        vec3f_copy(c.focus, focusPos)
-        vec3f_copy(l.focus, focusPos)
-        vec3f_copy(l.goalFocus, focusPos)
+    if c.cutscene == CUTSCENE_SGO_DEATH then
+        switch(m.action, sDeathCutscenes, m)
+
+        if sSGOCutsceneDuration < sMaxDuration then
+            sSGOCutsceneDuration = sSGOCutsceneDuration + 1
+        end
+
+        vec3f_copy(c.pos, sCamPos)
+        vec3f_copy(l.pos, sCamPos)
+        vec3f_copy(l.goalPos, sCamPos)
+
+        vec3f_copy(c.focus, sFocusPos)
+        vec3f_copy(l.focus, sFocusPos)
+        vec3f_copy(l.goalFocus, sFocusPos)
+    else
+        sSGOCutsceneDuration = 0
+        if sDeathCutscenes[m.action] then
+            c.cutscene = CUTSCENE_SGO_DEATH
+        end
     end
+end
+
+handle_scenematics = function()
+    handle_death_text()
+    handle_star_env_effects()
+    cam_test()
 end
 
 hook_event(HOOK_ON_DEATH, function(m)

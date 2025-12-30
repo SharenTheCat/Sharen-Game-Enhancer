@@ -52,6 +52,14 @@ ease_out = function(t, pow)
     return 1 - (1 - t) ^ pow
 end
 
+ease_in_out_quad = function(t)
+    if t < 0.5 then
+        return 2 * t ^ 2
+    end
+    t = t - 0.5
+    return 2 * t * (1 - t) + 0.5
+end
+
 switch = function(case, table, ...)
     if table[case] then
         return table[case](...)
@@ -60,22 +68,22 @@ switch = function(case, table, ...)
     end
 end
 
-angle_to_point = function(m, pos)
-    local a = pos.x - m.marioBodyState.headPos.x
-    local c = pos.z - m.marioBodyState.headPos.z
+angle_to_point = function(from, to)
+    local a = to.x - from.x
+    local c = to.z - from.z
 
-    local angle = s16(atan2s(c, a) - m.faceAngle.y)
+    local angle = atan2s(c, a)
 
     return angle
 end
 
-pitch_to_point = function(m, pos)
-    local a = pos.x - m.marioBodyState.headPos.x
-    local c = pos.z - m.marioBodyState.headPos.z
+pitch_to_point = function(from, to)
+    local a = to.x - from.x
+    local c = to.z - from.z
     a = math.sqrt(a * a + c * c)
 
-    local b = -pos.y
-    local d = -m.marioBodyState.headPos.y
+    local b = -to.y
+    local d = -from.y
 
     return atan2s(a, b - d)
 end
@@ -171,6 +179,8 @@ IMPORTANT_ENV_MAX_DIST = 2000
 
 CELEB_STAR_ACT_JUMP_TO_CENTER = 2
 CELEB_STAR_ACT_LEAVE = 3
+
+CUTSCENE_SGO_DEATH = 250
 
 E_MODEL_BURN_SMOKE_FIX = smlua_model_util_get_id("burn_smoke_fix_geo")
 E_MODEL_SMOKE_TRANSPARENT = smlua_model_util_get_id("smoke_transparency_geo")

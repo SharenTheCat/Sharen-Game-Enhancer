@@ -672,13 +672,13 @@ end
 --- @param o Object
 local obj_within_looking_range = function(m, o)
     local lookPoint = {x = o.oPosX, y = o.oPosY + o.hitboxHeight * 0.65, z = o.oPosZ}
+    local pos = m.marioBodyState.headPos
 
-    local pitch = pitch_to_point(m, lookPoint) - m.marioObj.header.gfx.angle.x
-    local yaw = angle_to_point(m, lookPoint)
+    local pitch = pitch_to_point(pos, lookPoint) - m.marioObj.header.gfx.angle.x
+    local yaw = s16(angle_to_point(pos, lookPoint) - m.faceAngle.y)
     local castYaw = yaw + m.marioObj.header.gfx.angle.y
     local objDist = dist_between_objects(m.marioObj, o)
 
-    local pos = m.marioBodyState.headPos
     local ray = collision_find_surface_on_ray(pos.x, pos.y, pos.z, OBJ_LOOKING_RANGE * sins(castYaw) * coss(-pitch),
     OBJ_LOOKING_RANGE * sins(-pitch), OBJ_LOOKING_RANGE * coss(castYaw) * coss(-pitch))
 
@@ -818,6 +818,7 @@ end
 
 local sLookObj = nil
 local sAttentionTimer = 0
+local sPrevPos = {x = 0, y = 0, z = 0}
 
 ---@param m MarioState
 local mario_update = function(m)
@@ -860,9 +861,9 @@ local mario_update = function(m)
                     lookPoint.y = gMarioStates[network_local_index_from_global(sLookObj.globalPlayerIndex)].marioBodyState.headPos.y
                 end
 
-                s.lookAnglePitch = pitch_to_point(m, lookPoint) - m.marioObj.header.gfx.angle.x - m.marioBodyState.torsoAngle.x * 0.65
+                s.lookAnglePitch = pitch_to_point(m.marioBodyState.headPos, lookPoint) - m.marioObj.header.gfx.angle.x - m.marioBodyState.torsoAngle.x * 0.65
 
-                s.lookAngleYaw = angle_to_point(m, lookPoint)
+                s.lookAngleYaw = s16(angle_to_point(m.marioBodyState.headPos, lookPoint) - m.faceAngle.y)
             end
         end
 
@@ -905,16 +906,34 @@ local mario_update = function(m)
             drop_and_set_mario_action(m, m.area.terrainType & TERRAIN_MASK == TERRAIN_SNOW and ACT_FROZEN or ACT_BURNT, 0)
         end
 
-        if m.controller.buttonDown & Y_BUTTON ~= 0 then
-            m.area.camera.cutscene = 250
-        elseif m.area.camera.cutscene == 250 then
-            m.area.camera.cutscene = 0
+        if m.controller.buttonPressed & Y_BUTTON ~= 0 then
+            m.hurtCounter = 8 * 4
         end
 
         local globalTimer = get_global_timer()
         -- only run this every once in a while for optimization, its not that necessary
         if math_fmod(globalTimer, 30) == 0 and (gSGOLocalSettings.sleepyMusic or sSleepMusic) then
             play_sleep_music(m)
+        end
+
+        if m.area.camera and m.area.camera.cutscene == CUTSCENE_SGO_DEATH then
+            local c = m.area.camera
+            local l = gLakituState
+
+            if sPrevPos.x ~= m.pos.x or sPrevPos.y ~= m.pos.y or sPrevPos.z ~= m.pos.z then
+                local deltaPos = {
+                    x = m.pos.x - sPrevPos.x,
+                    y = m.pos.y - sPrevPos.y,
+                    z = m.pos.z - sPrevPos.z,
+                }
+                vec3f_add(c.pos, deltaPos)
+                vec3f_add(l.pos, deltaPos)
+                vec3f_add(l.goalPos, deltaPos)
+
+                vec3f_add(c.focus, deltaPos)
+                vec3f_add(l.focus, deltaPos)
+                vec3f_add(l.goalFocus, deltaPos)
+            end
         end
 
         tempo_and_pitch_distort(m)
@@ -1106,8 +1125,8 @@ end)
 
 hook_event(HOOK_UPDATE, function()
     handle_scenematics()
-    cam_test()
     gTalkPrompt = false
+    vec3f_copy(sPrevPos, gMarioStates[0].pos)
 end)
 
 hook_event(HOOK_ON_WARP, function()

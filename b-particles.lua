@@ -528,7 +528,7 @@ id_bhvAshPile = hook_behavior(nil, OBJ_LIST_UNIMPORTANT, false, ash_pile_init, a
 local SPOTLIGHT_MAX_DIST = 1080
 local SPOTLIGHT_LIGHT_MAX_OFFSET = 175
 local SPOTLIGHT_LIGHT_RADIUS = 160
-local SPOTLIGHT_LIGHT_MAX_OPACITY = 0x92
+local SPOTLIGHT_LIGHT_MAX_OPACITY = 0xA4
 
 gSpotlightLightID = nil
 
@@ -544,6 +544,8 @@ local spotlight_init = function(o)
     o.oGraphYOffset = 40
     gSpotlightLightID = le_add_light(mPos.x, mPos.y + SPOTLIGHT_LIGHT_MAX_OFFSET, mPos.z, 0xFF, 0xFE, 0xCB, SPOTLIGHT_LIGHT_RADIUS, 2.5)
     o.header.gfx.skipInViewCheck = true
+    o.oFaceAnglePitch = 0
+    o.oFaceAngleRoll = 0
 end
 
 ---@param o Object
@@ -555,7 +557,7 @@ local spotlight_loop = function(o)
         bubba = obj_get_nearest_object_with_behavior_id(m.marioObj, id_bhvBubba)
     end
 
-    local mPos = bubba and bubba.header.gfx.pos or m.pos
+    local mPos = bubba and bubba.header.gfx.pos or m.marioObj.header.gfx.pos
 
     local xDif = mPos.x - o.oPosX
     local zDif = mPos.z - o.oPosZ

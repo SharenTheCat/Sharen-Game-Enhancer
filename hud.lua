@@ -928,6 +928,30 @@ local talk_popup = function(m)
     end
 end
 
+local sBlackBarTimer = 0
+local BLACK_BAR_APPEAR_TIMER = 24
+local BLACK_BAR_MAX_WIDTH = 18
+
+local render_scenematic_black_bars = function()
+    local m = gMarioStates[0]
+    local screenWidth = djui_hud_get_screen_width()
+    local screenHeight = djui_hud_get_screen_height()
+
+    if sBlackBarTimer > 0 then
+        local blackBarHeight = BLACK_BAR_MAX_WIDTH * ease_out(sBlackBarTimer / BLACK_BAR_APPEAR_TIMER, 3)
+        djui_hud_set_color(0, 0, 0, 0xFF)
+
+        djui_hud_render_rect(-2, -2, screenWidth + 2, blackBarHeight)
+        djui_hud_render_rect(-2, screenHeight - blackBarHeight, screenWidth + 2, blackBarHeight)
+    end
+
+    if m.area.camera and m.area.camera.cutscene == CUTSCENE_SGO_DEATH then
+        sBlackBarTimer = math.min(sBlackBarTimer + 1, 20)
+    else
+        sBlackBarTimer = math.max(sBlackBarTimer - 1, 0)
+    end
+end
+
 local debug = true
 
 hook_event(HOOK_ON_HUD_RENDER, function()
@@ -947,6 +971,7 @@ hook_event(HOOK_ON_HUD_RENDER, function()
     end
 
     talk_popup(m)
+    render_scenematic_black_bars()
 
     if m.controller.buttonPressed & D_JPAD ~= 0 then
         debug = not debug
@@ -961,9 +986,9 @@ hook_event(HOOK_ON_HUD_RENDER, function()
             {"animState = ", e.animState},
             {"animFrame = ", m.marioObj.header.gfx.animInfo.animFrame},
             {"animAccel = ", m.marioObj.header.gfx.animInfo.animAccel / 0x10000},
-            {"lightDarken = ", gLightDarken},
-            {"modelState = ", m.marioBodyState.modelState},
-            {"afterImageDataEntries = ", #gAfterImageData}
+            {"camDist = ", sCamDist},
+            {"camYaw = ", hex_to_deg(sCamYaw)},
+            {"camPitch = ", hex_to_deg(sCamPitch)}
         }
 
         djui_hud_set_font(FONT_NORMAL)
