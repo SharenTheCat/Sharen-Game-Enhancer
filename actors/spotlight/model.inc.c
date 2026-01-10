@@ -1125,10 +1125,11 @@ Gfx mat_actor_Light_Bulb[] = {
 	gsSPEndDisplayList(),
 };
 
-Gfx mat_actor_Light[] = {
+Gfx mat_actor_Light_layer5[] = {
 	gsSPGeometryMode(G_LIGHTING, 0),
 	gsDPPipeSync(),
 	gsDPSetCombineLERP(0, 0, 0, TEXEL0, TEXEL0, 0, ENVIRONMENT, 0, 0, 0, 0, TEXEL0, TEXEL0, 0, ENVIRONMENT, 0),
+	gsDPSetRenderMode(G_RM_AA_ZB_XLU_SURF, G_RM_AA_ZB_XLU_SURF2),
 	gsSPTexture(65535, 65535, 0, 0, 1),
 	gsDPSetTextureImage(G_IM_FMT_IA, G_IM_SIZ_8b_LOAD_BLOCK, 1, actor__64x64_textures__99__ia8),
 	gsDPSetTile(G_IM_FMT_IA, G_IM_SIZ_8b_LOAD_BLOCK, 0, 0, 7, 0, G_TX_WRAP | G_TX_NOMIRROR, 0, 0, G_TX_WRAP | G_TX_NOMIRROR, 0, 0),
@@ -1138,9 +1139,10 @@ Gfx mat_actor_Light[] = {
 	gsSPEndDisplayList(),
 };
 
-Gfx mat_revert_actor_Light[] = {
+Gfx mat_revert_actor_Light_layer5[] = {
 	gsSPGeometryMode(0, G_LIGHTING),
 	gsDPPipeSync(),
+	gsDPSetRenderMode(G_RM_AA_ZB_XLU_SURF, G_RM_AA_ZB_XLU_SURF2),
 	gsSPEndDisplayList(),
 };
 
@@ -1168,9 +1170,9 @@ Gfx actor_Light_mesh_layer_1[] = {
 };
 
 Gfx actor_Light_Ray_mesh_layer_5[] = {
-	gsSPDisplayList(mat_actor_Light),
+	gsSPDisplayList(mat_actor_Light_layer5),
 	gsSPDisplayList(actor_Light_Ray_mesh_layer_5_tri_0),
-	gsSPDisplayList(mat_revert_actor_Light),
+	gsSPDisplayList(mat_revert_actor_Light_layer5),
 	gsDPPipeSync(),
 	gsSPSetGeometryMode(G_LIGHTING),
 	gsSPClearGeometryMode(G_TEXTURE_GEN),

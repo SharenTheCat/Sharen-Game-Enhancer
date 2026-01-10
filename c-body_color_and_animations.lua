@@ -919,6 +919,28 @@ local sSkipReset = {
     ["JUMP_LAND_LEFTIE"] = true,
     ["JUMP_FALL"] = true,
 }
+
+local sGlubSoundTable = {
+    [CT_MARIO] = {
+        [3] = 0,
+        [16] = 0,
+        [35] = 1
+    },
+    [CT_LUIGI] = {
+        [3] = 0,
+        [21] = 1
+    },
+    [CT_TOAD] = {
+        [3] = 0,
+        [22] = 0,
+        [42] = 1,
+    },
+    [CT_WALUIGI] = {
+        [3] = 0,
+        [21] = 1
+    }
+}
+
 sPrevId = -1
 
 ---@param m MarioState
@@ -928,9 +950,64 @@ run_animations = function(m)
 
     local animInfo = m.marioObj.header.gfx.animInfo
     local id = animInfo.animID
+    local frame = animInfo.animFrame
+
+    if gSGOLocalSettings.miscThings and id == CHAR_ANIM_DROWNING_PART1 then
+        if m.character.type ~= CT_WARIO then
+            local glub = sGlubSoundTable[m.character.type][frame]
+
+            if glub then
+                local amount = 5 + 4 * glub
+                local rot = gVec3sZero()
+                for i = MARIO_ANIM_PART_ROOT, MARIO_ANIM_PART_HEAD + 1 do
+                    vec3s_add(rot, m.marioBodyState.animPartsRot[i])
+                end
+                rot.x = -(rot.x - deg_to_hex(90)) - m.marioObj.header.gfx.angle.x
+                rot.y = m.marioObj.header.gfx.angle.y + rot.y
+
+                local offset = 24
+                local spawnPos = {
+                    x = m.marioBodyState.headPos.x + offset * sins(rot.y) * coss(rot.x),
+                    y = m.marioBodyState.headPos.y + 5 + offset * sins(rot.x),
+                    z = m.marioBodyState.headPos.z + offset * coss(rot.y) * coss(rot.x),
+                }
+                for i = 0, amount do
+                    local model = i & 1 ~= 0 and E_MODEL_BUBBLE or E_MODEL_WHITE_PARTICLE_SMALL
+                    spawn_non_sync_object(id_bhvDrownBubble, model, spawnPos.x, spawnPos.y, spawnPos.z, function(o)
+                        local speed = 4 + 6 * random_float() + 8 * glub
+                        o.oMoveAngleYaw = rot.y - deg_to_hex(45) + deg_to_hex(90) * random_float()
+
+                        o.oForwardVel = speed * coss(rot.x)
+                        o.oVelY = speed * sins(rot.x)
+                    end)
+                end
+            end
+        elseif frame & 1 == 0 and (in_between(frame, 3, 32, true) or in_between(frame, 41, 76, true)) then
+            local rot = gVec3sZero()
+            for i = MARIO_ANIM_PART_ROOT, MARIO_ANIM_PART_HEAD + 1 do
+                vec3s_add(rot, m.marioBodyState.animPartsRot[i])
+            end
+            rot.x = -(rot.x - deg_to_hex(90)) - m.marioObj.header.gfx.angle.x
+            rot.y = m.marioObj.header.gfx.angle.y + rot.y
+
+            local offset = 24
+            local spawnPos = {
+                x = m.marioBodyState.headPos.x + offset * sins(rot.y) * coss(rot.x),
+                y = m.marioBodyState.headPos.y + 5 + offset * sins(rot.x),
+                z = m.marioBodyState.headPos.z + offset * coss(rot.y) * coss(rot.x),
+            }
+            local model = random_float() <= 0.8 and E_MODEL_BUBBLE or E_MODEL_WHITE_PARTICLE_SMALL
+            spawn_non_sync_object(id_bhvDrownBubble, model, spawnPos.x, spawnPos.y, spawnPos.z, function(o)
+                local speed = 8 + 4 * random_float()
+                o.oMoveAngleYaw = rot.y - deg_to_hex(6) + deg_to_hex(12) * random_float()
+
+                o.oForwardVel = speed * coss(rot.x)
+                o.oVelY = speed * sins(rot.x)
+            end)
+        end
+    end
 
     if registeredAnims[id] and s.newAnims then
-        local frame = animInfo.animFrame
         local fallDist = m.peakHeight - m.pos.y
 
         switch(id, {
@@ -940,7 +1017,7 @@ run_animations = function(m)
             elseif m.action == ACT_STEEP_JUMP then
                 e.animState = 53
             elseif e.animState < 51 then
-                if math.s16(gLakituState.yaw - m.faceAngle.y) < 0 then
+                if s16(gLakituState.yaw - m.faceAngle.y) < 0 then
                     e.animState = 51
                 else
                     e.animState = 52

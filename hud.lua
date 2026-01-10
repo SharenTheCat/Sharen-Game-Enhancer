@@ -820,7 +820,7 @@ end
 
 local render_death_text = function()
     if gDeathTextTimer == 1 then
-        audio_sample_play(SOUND_DEATH_JINGLE, gLakituState.pos, 0.5)
+        audio_sample_play(SOUND_DEATH_JINGLE, gLakituState.pos, 1)
     end
 
     gDeathTextTimer = gDeathTextTimer + 1
@@ -930,7 +930,7 @@ end
 
 local sBlackBarTimer = 0
 local BLACK_BAR_APPEAR_TIMER = 24
-local BLACK_BAR_MAX_WIDTH = 18
+local BLACK_BAR_MAX_WIDTH = 20
 
 local render_scenematic_black_bars = function()
     local m = gMarioStates[0]
@@ -941,8 +941,8 @@ local render_scenematic_black_bars = function()
         local blackBarHeight = BLACK_BAR_MAX_WIDTH * ease_out(sBlackBarTimer / BLACK_BAR_APPEAR_TIMER, 3)
         djui_hud_set_color(0, 0, 0, 0xFF)
 
-        djui_hud_render_rect(-2, -2, screenWidth + 2, blackBarHeight)
-        djui_hud_render_rect(-2, screenHeight - blackBarHeight, screenWidth + 2, blackBarHeight)
+        djui_hud_render_rect(-2, -2, screenWidth + 4, blackBarHeight)
+        djui_hud_render_rect(-2, screenHeight - blackBarHeight, screenWidth + 4, blackBarHeight)
     end
 
     if m.area.camera and m.area.camera.cutscene == CUTSCENE_SGO_DEATH then
@@ -988,7 +988,8 @@ hook_event(HOOK_ON_HUD_RENDER, function()
             {"animAccel = ", m.marioObj.header.gfx.animInfo.animAccel / 0x10000},
             {"camDist = ", sCamDist},
             {"camYaw = ", hex_to_deg(sCamYaw)},
-            {"camPitch = ", hex_to_deg(sCamPitch)}
+            {"camPitch = ", hex_to_deg(sCamPitch)},
+            {"cutsceneTimer = ", sCutsceneTimer},
         }
 
         djui_hud_set_font(FONT_NORMAL)

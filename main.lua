@@ -1,5 +1,5 @@
 -- name: Sharen's Game Enhancer In-Dev [WIP]
--- description: A total re-do of a mayority of Mario's animations, complete with extra flairs such as open hands, dynamic body movement and more! \n\nAuthor, Code, Animations: Sharen \nDeath Jingle extracted and isolated by eros71 from M&L: SS + BM
+-- description: A total re-do of a mayority of Mario's animations, complete with extra flairs such as open hands, dynamic body movement and more! \n\nAuthor, Code, Animations: Sharen \nDeath Jingle: Takachi (@takachi_kasane on Discord)
 
 -- optimization
 local hook_mod_menu_checkbox, math_fmod, smlua_anim_util_set_animation, hook_event, math_min, math_abs, lerp =
@@ -910,6 +910,14 @@ local mario_update = function(m)
             m.hurtCounter = 8 * 4
         end
 
+        if m.controller.buttonPressed & X_BUTTON ~= 0 then
+            m.health = 0x100
+            m.hurtCounter = 0
+            m.healCounter = 8 * 4
+            m.area.camera.cutscene = 0
+            set_mario_action(m, m.waterLevel > m.pos.y and ACT_WATER_IDLE or ACT_IDLE, 0)
+        end
+
         local globalTimer = get_global_timer()
         -- only run this every once in a while for optimization, its not that necessary
         if math_fmod(globalTimer, 30) == 0 and (gSGOLocalSettings.sleepyMusic or sSleepMusic) then
@@ -1007,6 +1015,12 @@ hook_event(HOOK_ON_SET_MARIO_ACTION, function(m)
 
     if m.prevAction == ACT_SHOCKED then
         e.temperature = TEMPERATURE_MAX_VALUE
+    end
+
+    if m.action ~= ACT_INTO_ABYSS and gDeathActs[m.action] and obj_get_first_with_behavior_id(id_bhvSpotlight) == nil then
+        spawn_non_sync_object(id_bhvSpotlight, E_MODEL_SPOTLIGHT, m.pos.x, m.pos.y + 520, m.pos.z, function(o)
+            o.globalPlayerIndex = m.marioObj.globalPlayerIndex
+        end)
     end
 
     spawn_particles_on_set_act(m)

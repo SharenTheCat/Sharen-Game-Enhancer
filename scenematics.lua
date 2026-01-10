@@ -137,10 +137,10 @@ gDeathActs = {
     end,
     [ACT_DROWNING] = function(m)
         return m.marioObj.header.gfx.animInfo.animID == CHAR_ANIM_DROWNING_PART2 and
-        m.marioObj.header.gfx.animInfo.animFrame >= m.marioObj.header.gfx.animInfo.curAnim.loopEnd * 0.25
+        m.marioObj.header.gfx.animInfo.animFrame >= m.marioObj.header.gfx.animInfo.curAnim.loopEnd * 0.6
     end,
     [ACT_WATER_DEATH] = function(m)
-        return is_anim_at_end(m) ~= 0
+        return is_anim_at_end(m) ~= 0 and m.marioObj.header.gfx.animInfo.animID == CHAR_ANIM_WATER_DYING
     end,
     [ACT_CAUGHT_IN_WHIRLPOOL] = function(m)
         return m.actionTimer >= 16
@@ -182,7 +182,7 @@ local sSpecialSpotlightTriggers = {
         return m.marioObj.header.gfx.animInfo.animFrame >= 22
     end,
     [ACT_DROWNING] = function(m)
-        return m.marioObj.header.gfx.animInfo.animID == CHAR_ANIM_DROWNING_PART2 or m.marioObj.header.gfx.animInfo.animFrame >= 70
+        return m.marioObj.header.gfx.animInfo.animID == CHAR_ANIM_DROWNING_PART2
     end,
     [ACT_SQUISHED] = function(m)
         return m.actionState == 2 or (m.actionArg >= 300 and not gSGOLocalSettings.miscThings)
@@ -237,9 +237,6 @@ local handle_death_text = function()
             if gSGOLocalSettings.deadBuzz then
                 audio_sample_play(SOUND_DEATH_BUZZ, c.pos, 0.5)
             end
-            spawn_non_sync_object(id_bhvSpotlight, E_MODEL_SPOTLIGHT, m.pos.x, m.pos.y + 520, m.pos.z, function(o)
-                o.globalPlayerIndex = m.marioObj.globalPlayerIndex
-            end)
             sPlayedBuzz = true
         end
 
@@ -269,20 +266,23 @@ local handle_death_text = function()
     end
 end
 
-sCamPos = {x = 0, y = 0, z = 0}
-sFocusPos = {x = 0, y = 0, z = 0}
+sCamPos = gVec3fZero()
+sFocusPos = gVec3fZero()
 sCamDist = 0
 sCamYaw = 0
 sCamPitch = 0
 sMoveDivisor = 1
 
-sSGOCutsceneDuration = 0
+sCutsceneTimer = 0
+sCutsceneState = 0
 local sMaxDuration = 0
 
 local sGoalCamDist = 0
 local sGoalCamYaw = 0
 local sGoalCamPitch = 0
-local sGoalFocusPos = {x = 0, y = 0, z = 0}
+local sGoalFocusPos = gVec3fZero()
+
+local sCamSideCameFrom = 0
 
 local vec3f_approach_asymptotic = function(current, goal, mult)
     current.x = approach_f32_asymptotic(current.x, goal.x, mult)
@@ -297,9 +297,11 @@ local set_cam_pos = function(x, y, z)
 end
 
 local cam_orbit = function()
-    set_cam_pos(sFocusPos.x + sCamDist * sins(s16(sCamYaw + 0x8000)) * coss(sCamPitch),
-    sFocusPos.y + sCamDist * sins(sCamPitch),
-    sFocusPos.z + sCamDist * coss(s16(sCamYaw + 0x8000)) * coss(sCamPitch))
+    set_cam_pos(
+        sFocusPos.x + sCamDist * sins(s16(sCamYaw + 0x8000)) * coss(sCamPitch),
+        sFocusPos.y + sCamDist * sins(sCamPitch),
+        sFocusPos.z + sCamDist * coss(s16(sCamYaw + 0x8000)) * coss(sCamPitch)
+    )
 end
 
 local set_focus_pos = function(x, y, z)
@@ -322,7 +324,7 @@ sDeathCutscenes = {
         sMoveDivisor = 9.2
         sGoalCamYaw = m.faceAngle.y + deg_to_hex(145)
 
-        if sSGOCutsceneDuration < ZOOM_IN then
+        if sCutsceneTimer < ZOOM_IN then
             sGoalCamDist = 400
             sGoalCamPitch = deg_to_hex(-6)
 
@@ -337,7 +339,7 @@ sDeathCutscenes = {
 
             set_goal_focus_pos(m.pos.x, m.pos.y + 60, m.pos.z)
 
-            local t = ease_in_out_quad((sSGOCutsceneDuration - ZOOM_IN) / (sMaxDuration - ZOOM_IN))
+            local t = ease_in_out_quad((sCutsceneTimer - ZOOM_IN) / (sMaxDuration - ZOOM_IN))
 
             sCamDist = lerp(400, sGoalCamDist, t)
             sCamPitch = lerp(deg_to_hex(-6), sGoalCamPitch, t)
@@ -352,19 +354,20 @@ sDeathCutscenes = {
         set_handheld_shake(HAND_CAM_SHAKE_STAR_DANCE)
     end,
     [ACT_DEATH_ON_BACK] = function(m)
-        sMaxDuration = 80
+        sMaxDuration = 200
 
-        if sSGOCutsceneDuration < 10 then
+        if sCutsceneTimer < 10 then
             sCamDist = 170
-            sCamYaw = m.faceAngle.y + deg_to_hex(265)
+            sCamYaw = m.faceAngle.y - deg_to_hex(95)
             sCamPitch = deg_to_hex(2)
 
+            skip_camera_interpolation()
             cam_orbit()
             sCamPos.y = sCamPos.y + 20
-        elseif sSGOCutsceneDuration < 49 then
+        elseif sCutsceneTimer < 49 then
             sMoveDivisor = 48
             sGoalCamDist = 480
-            sGoalCamYaw = m.faceAngle.y + deg_to_hex(185)
+            sGoalCamYaw = m.faceAngle.y - deg_to_hex(175)
             sGoalCamPitch = deg_to_hex(42)
 
             sCamDist = approach_f32_asymptotic(sCamDist, sGoalCamDist, 1 / sMoveDivisor)
@@ -385,6 +388,91 @@ sDeathCutscenes = {
 
         set_focus_pos(m.pos.x, m.pos.y + 20, m.pos.z)
     end,
+    [ACT_DEATH_ON_STOMACH] = function(m)
+        local PAN_ABOVE_PHASE = 75
+        sMaxDuration = 200
+
+        if sCutsceneTimer == 1 then
+            sGoalCamYaw = m.faceAngle.y - deg_to_hex(132)
+        else
+            sMoveDivisor = 9.2
+
+            if sCutsceneTimer <= PAN_ABOVE_PHASE then
+                sGoalCamDist = 360
+                sGoalCamYaw = s16(sGoalCamYaw - deg_to_hex(0.93))
+                sGoalCamPitch = deg_to_hex(9)
+
+                sCamDist = approach_f32_asymptotic(sCamDist, sGoalCamDist, 1 / sMoveDivisor)
+            else
+                local t = (sCutsceneTimer - PAN_ABOVE_PHASE) / (sMaxDuration - PAN_ABOVE_PHASE)
+
+                sGoalCamDist = 1400
+                sGoalCamYaw = s16(sGoalCamYaw - lerp(deg_to_hex(0.93), deg_to_hex(0.52), ease_in_out_quad(t)))
+                sGoalCamPitch = lerp(deg_to_hex(9), deg_to_hex(85), ease_in_out_quad(t))
+
+                sCamDist = math.min(sCamDist + 5.2 * ease_in(t, 2), sGoalCamDist)
+            end
+
+            sCamYaw = approach_s16_asymptotic(sCamYaw, sGoalCamYaw, sMoveDivisor)
+            sCamPitch = approach_s16_asymptotic(sCamPitch, sGoalCamPitch, sMoveDivisor)
+
+            cam_orbit()
+        end
+
+        set_focus_pos(m.pos.x, m.pos.y + 20, m.pos.z)
+    end,
+    [ACT_DROWNING] = function(m)
+        sMaxDuration = 102
+        sMoveDivisor = 9.4
+
+        if sCutsceneTimer == 1 then
+            if s16(sCamYaw - m.faceAngle.y) < 0 then
+                sCamSideCameFrom = -1
+            else
+                sCamSideCameFrom = 1
+            end
+
+            sGoalCamYaw = s16(m.faceAngle.y + deg_to_hex(130) * sCamSideCameFrom)
+        elseif sCutsceneTimer < sMaxDuration then
+            sGoalCamDist = 410
+            sGoalCamPitch = 0
+
+            sGoalCamYaw = s16(sGoalCamYaw + deg_to_hex(0.87) * sCamSideCameFrom)
+
+            sCamDist = approach_f32_asymptotic(sCamDist, sGoalCamDist, 1 / sMoveDivisor)
+            sCamYaw = approach_s16_asymptotic(sCamYaw, sGoalCamYaw, sMoveDivisor)
+            sCamPitch = approach_s16_asymptotic(sCamPitch, sGoalCamPitch, sMoveDivisor)
+
+            set_goal_focus_pos(m.pos.x, m.pos.y + 80, m.pos.z)
+            vec3f_approach_asymptotic(sFocusPos, sGoalFocusPos, 1 / sMoveDivisor)
+
+            if m.pos.y >= m.waterLevel - 750 then
+                sCutsceneState = 1
+            else
+                sCutsceneState = 0
+            end
+
+            cam_orbit()
+        else
+            skip_camera_interpolation()
+            set_focus_pos(m.pos.x, m.pos.y + 80, m.pos.z)
+
+            if sCutsceneState == 1 then
+                set_cam_pos(
+                    sFocusPos.x + 340 * sins(s16(sCamYaw + 0x8000)),
+                    m.waterLevel + 980,
+                    sFocusPos.z + 340 * coss(s16(sCamYaw + 0x8000))
+                )
+            else
+                local distToFloor = m.pos.y - m.floorHeight
+                local t = clamp(distToFloor / 620, 0, 1)
+                sCamDist = 620 * t + 410
+                sCamPitch = deg_to_hex(-70) * t
+
+                cam_orbit()
+            end
+        end
+    end,
 }
 
 cam_test = function()
@@ -393,10 +481,6 @@ cam_test = function()
     local l = gLakituState
 
     if not c then return end
-
-    sCamDist = vec3f_dist(c.focus, c.pos)
-    sCamYaw = angle_to_point(c.pos, c.focus)
-    sCamPitch = pitch_to_point(c.pos, c.focus)
 
     sFocusPos = {
         x = c.focus.x,
@@ -407,8 +491,15 @@ cam_test = function()
     if c.cutscene == CUTSCENE_SGO_DEATH then
         switch(m.action, sDeathCutscenes, m)
 
-        if sSGOCutsceneDuration < sMaxDuration then
-            sSGOCutsceneDuration = sSGOCutsceneDuration + 1
+        if sCutsceneTimer < sMaxDuration or sMaxDuration == -1 then
+            sCutsceneTimer = sCutsceneTimer + 1
+        end
+
+        local ray = collision_find_surface_on_ray(sFocusPos.x, sFocusPos.y, sFocusPos.z,
+        sCamDist * sins(s16(sCamYaw + 0x8000)) * coss(sCamPitch), sCamDist * sins(sCamPitch), sCamDist * coss(s16(sCamYaw + 0x8000)) * coss(sCamPitch))
+
+        if ray.surface then
+            vec3f_copy(sCamPos, ray.hitPos)
         end
 
         vec3f_copy(c.pos, sCamPos)
@@ -419,11 +510,16 @@ cam_test = function()
         vec3f_copy(l.focus, sFocusPos)
         vec3f_copy(l.goalFocus, sFocusPos)
     else
-        sSGOCutsceneDuration = 0
+        sCutsceneTimer = 0
+        sCutsceneState = 0
         if sDeathCutscenes[m.action] then
             c.cutscene = CUTSCENE_SGO_DEATH
         end
     end
+
+    sCamDist = vec3f_dist(c.focus, c.pos)
+    sCamYaw = angle_to_point(c.pos, c.focus)
+    sCamPitch = pitch_to_point(c.pos, c.focus)
 end
 
 handle_scenematics = function()
