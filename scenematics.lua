@@ -3,7 +3,8 @@ local STAR_SOUND_DURATION = math.floor(1.2 * 30)
 local sSoundTimer = 0
 
 local sCurSkyboxColor = {0xFF, 0xFF, 0xFF}
-sDefaultAmbientColor = {r = 0xFF, g = 0xFF, b = 0xFF}
+local sCurFogColor = {0xFF, 0xFF, 0xFF}
+local sDefaultAmbientColor = {r = 0xFF, g = 0xFF, b = 0xFF}
 gWaitedForLightsOnOtherMods = false
 local sLightIntensities = {}
 
@@ -29,6 +30,7 @@ local handle_star_env_effects = function()
     if gLightDarken < 1 then
         for i = 0, 2 do
             set_skybox_color(i, sCurSkyboxColor[i + 1] * gLightDarken)
+            set_fog_color(i, sCurFogColor[i + 1] * gLightDarken)
         end
 
         le_set_ambient_color(sDefaultAmbientColor.r * gLightDarken, sDefaultAmbientColor.g * gLightDarken, sDefaultAmbientColor.b * gLightDarken)
@@ -41,6 +43,7 @@ local handle_star_env_effects = function()
     elseif gLightDarken ~= 2 then
         for i = 0, 2 do
             set_skybox_color(i, sCurSkyboxColor[i + 1])
+            set_fog_color(i, sCurFogColor[i + 1])
         end
 
         le_set_ambient_color(sDefaultAmbientColor.r, sDefaultAmbientColor.g, sDefaultAmbientColor.b)
@@ -57,6 +60,7 @@ local handle_star_env_effects = function()
     else
         for i = 0, 2 do
             sCurSkyboxColor[i - 1] = get_skybox_color(i)
+            sCurFogColor[i - 1] = get_fog_color(i)
         end
 
         le_get_ambient_color(sDefaultAmbientColor)
