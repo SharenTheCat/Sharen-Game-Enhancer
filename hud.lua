@@ -432,8 +432,6 @@ local save_settings = function()
     mod_storage_save_bool("miscThings", sMenuTable[4][SECTION_CONTENT][4][OPTION_VALUE])
 end
 
-update_settings()
-
 ---@param m MarioState
 handle_menu_inputs = function(m)
     if not sMenuOpen then return end
@@ -945,7 +943,7 @@ local render_scenematic_black_bars = function()
         djui_hud_render_rect(-2, screenHeight - blackBarHeight, screenWidth + 4, blackBarHeight)
     end
 
-    if m.area.camera and m.area.camera.cutscene == CUTSCENE_SGO_DEATH then
+    if m.area.camera and m.area.camera.cutscene == CUTSCENE_SGO_DEATH and not (mario_can_bubble(m) and m.numLives > 0) then
         sBlackBarTimer = math.min(sBlackBarTimer + 1, 20)
     else
         sBlackBarTimer = math.max(sBlackBarTimer - 1, 0)
@@ -1005,6 +1003,7 @@ hook_event(HOOK_ON_HUD_RENDER, function()
 end)
 
 hook_event(HOOK_ON_MODS_LOADED, function()
+    update_settings()
     sHasModHiddenHud = hud_is_hidden()
 end)
 

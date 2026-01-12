@@ -82,6 +82,7 @@ local registeredAnims = {
     [50] = true, -- standing death
     [205] = true, -- star dance
     [206] = true, -- star dance end
+    [48] = true, -- coughing
 }
 
 ---@param m MarioState
@@ -506,6 +507,7 @@ local update_mario_body = function(m, id)
         ["FAST_RUN"] = true,
         [MARIO_ANIM_SLIDE] = true,
         ["SLIDE_FRONT_NEUTRAL"] = true,
+        ["SLIDE_NEUTRAL_FRONT"] = true,
         ["SLIDE_FORWARD"]  = true,
         [MARIO_ANIM_STOP_SLIDE] = frame < 9,
         [MARIO_ANIM_FALL_FROM_SLIDE] = true,
@@ -550,6 +552,13 @@ local update_mario_body = function(m, id)
         [MARIO_ANIM_LAND_ON_STOMACH] = frame < 40,
     }
 
+    local rightHandOpenCond = {
+        [MARIO_ANIM_FALL_OVER_BACKWARDS] = frame < 67,
+        [MARIO_ANIM_CLIMB_DOWN_LEDGE] = frame < 4,
+        [MARIO_ANIM_DYING_ON_STOMACH] = frame >= 40,
+        [MARIO_ANIM_COUGHING] = in_between(frame, 5, 21, true) or frame >= 43
+    }
+
     if s.newAnims then
         local fallDist = m.peakHeight - m.pos.y
 
@@ -558,8 +567,7 @@ local update_mario_body = function(m, id)
         if openHandCond[id] then
             mBody.handState = MARIO_HAND_OPEN
 
-        elseif (id == MARIO_ANIM_FALL_OVER_BACKWARDS and frame < 67) or
-        (id == MARIO_ANIM_CLIMB_DOWN_LEDGE and frame < 4) or (id == MARIO_ANIM_DYING_ON_STOMACH and frame >= 40) then
+        elseif rightHandOpenCond[id] then
             mBody.handState = MARIO_HAND_RIGHT_OPEN
 
         elseif id == MARIO_ANIM_STAR_DANCE then
@@ -698,6 +706,15 @@ local update_mario_body = function(m, id)
                         mBody.eyeState = MARIO_EYES_CLOSED
                     else
                         mBody.eyeState = MARIO_EYES_DEAD
+                    end
+                end,
+                [MARIO_ANIM_COUGHING] = function()
+                    if in_between(frame, 2, 13, true) or in_between(frame, 92, 103) then
+                        mBody.eyeState = MARIO_EYES_LOOK_RIGHT
+                    elseif in_between(frame, 37, 48, true) then
+                        mBody.eyeState = MARIO_EYES_LOOK_LEFT
+                    elseif frame > 4 then
+                        mBody.eyeState = MARIO_EYES_HALF_CLOSED
                     end
                 end,
             })
@@ -913,6 +930,8 @@ local sSkipReset = {
     ["SLIDE_FRONT_NEUTRAL"] = true,
     ["SLIDE_FORWARD"] = true,
     ["SLIDE_BACKWARD"] = true,
+    ["SLIDE_NEUTRAL_BACK"] = true,
+    ["SLIDE_NEUTRAL_FRONT"] = true,
     ["STEEP_JUMP"] = true,
     ["JUMP_LEFTIE"] = true,
     ["JUMP_FALL_LEFTIE"] = true,
@@ -974,7 +993,7 @@ run_animations = function(m)
                 for i = 0, amount do
                     local model = i & 1 ~= 0 and E_MODEL_BUBBLE or E_MODEL_WHITE_PARTICLE_SMALL
                     spawn_non_sync_object(id_bhvDrownBubble, model, spawnPos.x, spawnPos.y, spawnPos.z, function(o)
-                        local speed = 4 + 6 * random_float() + 8 * glub
+                        local speed = 4 + 6 * random_float() + 8 * glub + m.forwardVel
                         o.oMoveAngleYaw = rot.y - deg_to_hex(45) + deg_to_hex(90) * random_float()
 
                         o.oForwardVel = speed * coss(rot.x)
@@ -998,7 +1017,7 @@ run_animations = function(m)
             }
             local model = random_float() <= 0.8 and E_MODEL_BUBBLE or E_MODEL_WHITE_PARTICLE_SMALL
             spawn_non_sync_object(id_bhvDrownBubble, model, spawnPos.x, spawnPos.y, spawnPos.z, function(o)
-                local speed = 8 + 4 * random_float()
+                local speed = 8 + 4 * random_float() + m.forwardVel
                 o.oMoveAngleYaw = rot.y - deg_to_hex(6) + deg_to_hex(12) * random_float()
 
                 o.oForwardVel = speed * coss(rot.x)
@@ -1076,34 +1095,28 @@ run_animations = function(m)
         end,
         [MARIO_ANIM_SLIDE] = function()
             local intendedDYaw = s16(m.intendedYaw - m.faceAngle.y)
-            local playBackAnim = analog_stick_held_back(m) ~= 0 and m.intendedMag >= 12
-            local playFrontAnim = in_between(intendedDYaw, deg_to_hex(-65), deg_to_hex(65), true) and m.intendedMag >= 12
+            local holdingBack = analog_stick_held_back(m) ~= 0 and m.intendedMag >= 12
+            local holdingFront = in_between(intendedDYaw, deg_to_hex(-65), deg_to_hex(65), true) and m.intendedMag >= 12
+            local playBackAnim = e.animState & 1 ~= 0
 
-            if e.animState == 0 then
-                if playBackAnim or playFrontAnim then
-                    e.animState = 1
+            if e.animState == 0 then -- neutral anim
+                if holdingBack or holdingFront then
+                    e.animState = holdingBack and 1 or 2
                 end
-            elseif e.animState == 1 then
-                set_anim_to_frame(m, frame - 2)
+            elseif e.animState <= 2 then -- transition into directional anim
+                id = playBackAnim and "SLIDE_NEUTRAL_BACK" or "SLIDE_NEUTRAL_FRONT"
+
+                if frame == 0 then
+                    e.animState = playBackAnim and 3 or 4
+                end
+            elseif e.animState <= 4 then -- directional anim
+                id = playBackAnim and "SLIDE_BACKWARD" or "SLIDE_FORWARD"
+
+                if (playBackAnim and not holdingBack) or (not playBackAnim and not holdingFront) then
+                    e.animState = playBackAnim and 5 or 6
+                end
+            else -- transition back to neutral
                 id = playBackAnim and "SLIDE_BACK_NEUTRAL" or "SLIDE_FRONT_NEUTRAL"
-
-                if frame <= 0 then
-                    e.animState = playBackAnim and 2 or 3
-                end
-            elseif e.animState == 2 then
-                id = "SLIDE_BACKWARD"
-
-                if not playBackAnim then
-                    e.animState = 4
-                end
-            elseif e.animState == 3 then
-                id = "SLIDE_FORWARD"
-
-                if not playFrontAnim then
-                    e.animState = 4
-                end
-            else
-                id = (sPrevId == "SLIDE_BACKWARD" or sPrevId == "SLIDE_BACK_NEUTRAL") and "SLIDE_BACK_NEUTRAL" or "SLIDE_FRONT_NEUTRAL"
 
                 if is_anim_at_end(m) ~= 0 then
                     e.animState = 0
@@ -1257,13 +1270,13 @@ run_animations = function(m)
                 startFrame = 9
             elseif id == MARIO_ANIM_FIRE_LAVA_BURN and m.action == ACT_BURNING_FALL then
                 startFrame = 4
-            elseif id == MARIO_ANIM_JUMP_RIDING_SHELL and m.action == ACT_RIDING_SHELL_FALL then
+            elseif (id == MARIO_ANIM_JUMP_RIDING_SHELL and m.action == ACT_RIDING_SHELL_FALL) or (id == "SLIDE_NEUTRAL_BACK" or id == "SLIDE_NEUTRAL_FRONT") then
                 startFrame = 5
             elseif (id == MARIO_ANIM_RIDING_SHELL or id == MARIO_ANIM_START_RIDING_SHELL) and e.animState == 2 then
                 startFrame = id == MARIO_ANIM_RIDING_SHELL and 19 or 27
             elseif id == "FAR_FALL" then
                 startFrame = 22 -- the reason for this 22 frame start is so that spinning sounds cant play if you fall while triple jumping, for example
-            elseif id == "JUMP_LEFTIE" then
+            elseif id == "JUMP_LEFTIE" or id == CHAR_ANIM_COUGHING then
                 startFrame = 1
             end
 

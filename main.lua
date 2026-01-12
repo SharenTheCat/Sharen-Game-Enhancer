@@ -1017,7 +1017,8 @@ hook_event(HOOK_ON_SET_MARIO_ACTION, function(m)
         e.temperature = TEMPERATURE_MAX_VALUE
     end
 
-    if m.action ~= ACT_INTO_ABYSS and gDeathActs[m.action] and obj_get_first_with_behavior_id(id_bhvSpotlight) == nil then
+    if m.action ~= ACT_INTO_ABYSS and gDeathActs[m.action] and obj_get_first_with_behavior_id(id_bhvSpotlight) == nil and not (m.numLives > 0 and mario_can_bubble(m)) and
+    m.playerIndex == 0 then
         spawn_non_sync_object(id_bhvSpotlight, E_MODEL_SPOTLIGHT, m.pos.x, m.pos.y + 520, m.pos.z, function(o)
             o.globalPlayerIndex = m.marioObj.globalPlayerIndex
         end)

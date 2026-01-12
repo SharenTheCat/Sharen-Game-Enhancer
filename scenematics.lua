@@ -83,7 +83,7 @@ local handle_star_env_effects = function()
         end
 
         local elegibleForNoise = 3
-        if behavior == starNewID or behavior == grandStarNewID then
+        if behavior == starNewID or behavior == grandStarNewID or behavior == celebStarNewID then
             elegibleForNoise = 0
         elseif behavior == spawnedStarNewID or behavior == spawnedStarNoExitNewID then
             elegibleForNoise = 2
@@ -98,7 +98,9 @@ local handle_star_env_effects = function()
                 sSoundTimer = sSoundTimer + 1
             end
 
-            if m.health > 0xFF and gDeathActs[m.action] == nil then
+            local canBubble = (mario_can_bubble(m) and m.numLives > 0) or m.action == ACT_BUBBLED
+
+            if (m.health > 0xFF and gDeathActs[m.action] == nil) or not canBubble then
                 if gLightDarken > 1 then gLightDarken = 1 end
                 local starPos = {x = gNearestStar.oPosX, y = gNearestStar.oPosY, z = gNearestStar.oPosZ}
                 local dist = vec3f_dist(m.pos, starPos)
@@ -225,8 +227,6 @@ local handle_death_text = function()
         bubba = obj_get_nearest_object_with_behavior_id(m.marioObj, id_bhvBubba)
     end
 
-    local focus = bubba and bubba.header.gfx.pos or m.marioObj.header.gfx.pos
-
     if gDeathActs[m.action] or (m.health - 64 * m.hurtCounter < 0x100 and m.action ~= ACT_BUBBLED) then
         if not canBubble and tooBad then
             fade_volume_scale(0, 0, 30)
@@ -244,7 +244,7 @@ local handle_death_text = function()
             sPlayedBuzz = true
         end
 
-        if emphazasise_death() then
+        if emphazasise_death() and not canBubble then
             gLightDarken = clamp(gLightDarken - 0.05, 0.1, 1)
         end
 
@@ -477,6 +477,18 @@ sDeathCutscenes = {
             end
         end
     end,
+    [ACT_WATER_DEATH] = function(m)
+        sMaxDuration = 1
+
+        sCamDist = 460
+        sCamYaw = m.faceAngle.y - deg_to_hex(145)
+        sCamPitch = 0
+
+        set_focus_pos(m.pos.x, m.pos.y + 80, m.pos.z)
+
+        skip_camera_interpolation()
+        cam_orbit()
+    end
 }
 
 cam_test = function()
