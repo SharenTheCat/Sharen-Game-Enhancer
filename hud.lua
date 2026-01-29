@@ -1,3 +1,7 @@
+----------------------------
+--------  SETTINGS  --------
+----------------------------
+
 local SECTION_NAME = 0
 local SECTION_COLOR = 1
 local SECTION_DESC = 2
@@ -332,7 +336,7 @@ local sMenuTable = {
     },
 }
 
-gSGOLocalSettings = {}
+gSGELocalSettings = {}
 
 local sMenuOpen = false
 local sCurrSection = 1
@@ -348,7 +352,7 @@ local sShake = {x = 0, y = 0}
 local update_settings = function()
     local s = gPlayerSyncTable[0]
 
-    gSGOLocalSettings = {
+    gSGELocalSettings = {
         objLook = sMenuTable[1][SECTION_CONTENT][3][OPTION_VALUE],
         divePitch = sMenuTable[1][SECTION_CONTENT][5][OPTION_VALUE],
         squashStretch = sMenuTable[1][SECTION_CONTENT][6][OPTION_VALUE],
@@ -751,7 +755,7 @@ local render_option_menu = function()
     djui_hud_set_color(sCurrColor.r, sCurrColor.g, sCurrColor.b, alpha * 0.8)
 
     local headerHeight = 90
-    local headerText = "Sharen's Game Overhaul Mod Menu"
+    local headerText = "Sharen's Game Enhancer Mod Menu"
     local headerScale = 2
 
     djui_hud_render_rect(0, 0, screenWidth + 2, headerHeight)
@@ -800,6 +804,10 @@ local render_option_menu = function()
         60 * (i - 1), descScale)
     end
 end
+
+------------------------------------
+--------  TOO BAD SEQUENCE  --------
+------------------------------------
 
 local sTextState = {}
 local sDeathText = "TOO BAD!"
@@ -878,6 +886,10 @@ local reset_death_text = function()
     end
 end
 
+-------------------------------
+--------  TALK POP-UP  --------
+-------------------------------
+
 local sTalkPromptTimer = 0
 local sTalkPromptText = "You should never see this text in game lol"
 
@@ -885,7 +897,7 @@ local SOUND_PROMPT_SHOW = audio_sample_load("talk_popup.mp3")
 
 ---@param m MarioState
 local talk_popup = function(m)
-    if not gSGOLocalSettings.talkPopUp then return end
+    if not gSGELocalSettings.talkPopUp then return end
     local headPos = m.marioBodyState.headPos
 
     local screenPos = {x = headPos.x, y = headPos.y + 110, z = headPos.z}
@@ -926,6 +938,10 @@ local talk_popup = function(m)
     end
 end
 
+------------------------------
+--------  BLACK BARS  --------
+------------------------------
+
 local sBlackBarTimer = 0
 local BLACK_BAR_APPEAR_TIMER = 24
 local BLACK_BAR_MAX_WIDTH = 20
@@ -936,19 +952,25 @@ local render_scenematic_black_bars = function()
     local screenHeight = djui_hud_get_screen_height()
 
     if sBlackBarTimer > 0 then
+        local prevBlackBarHeight = BLACK_BAR_MAX_WIDTH * ease_out((sBlackBarTimer - 1) / BLACK_BAR_APPEAR_TIMER, 3)
         local blackBarHeight = BLACK_BAR_MAX_WIDTH * ease_out(sBlackBarTimer / BLACK_BAR_APPEAR_TIMER, 3)
         djui_hud_set_color(0, 0, 0, 0xFF)
 
-        djui_hud_render_rect(-2, -2, screenWidth + 4, blackBarHeight)
-        djui_hud_render_rect(-2, screenHeight - blackBarHeight, screenWidth + 4, blackBarHeight)
+        djui_hud_render_rect_interpolated(-2, -2, screenWidth + 4, prevBlackBarHeight, -2, -2, screenWidth + 4, blackBarHeight)
+        djui_hud_render_rect_interpolated(-2, screenHeight - prevBlackBarHeight, screenWidth + 4, prevBlackBarHeight, -2,
+        screenHeight - blackBarHeight, screenWidth + 4, blackBarHeight)
     end
 
-    if m.area.camera and m.area.camera.cutscene == CUTSCENE_SGO_DEATH and not (mario_can_bubble(m) and m.numLives > 0) then
+    if m.area.camera and m.area.camera.cutscene == CUTSCENE_SGE_DEATH and not (mario_can_bubble(m) and m.numLives > 0) then
         sBlackBarTimer = math.min(sBlackBarTimer + 1, 20)
     else
         sBlackBarTimer = math.max(sBlackBarTimer - 1, 0)
     end
 end
+
+-------------------------
+--------  HOOKS  --------
+-------------------------
 
 local debug = true
 
@@ -987,7 +1009,8 @@ hook_event(HOOK_ON_HUD_RENDER, function()
             {"camDist = ", sCamDist},
             {"camYaw = ", hex_to_deg(sCamYaw)},
             {"camPitch = ", hex_to_deg(sCamPitch)},
-            {"cutsceneTimer = ", sCutsceneTimer},
+            {"nearestStar = ", tostring(not gNearestStar or get_id_from_behavior(gNearestStar.behavior))},
+            {"starDist = ", gStarDist},
         }
 
         djui_hud_set_font(FONT_NORMAL)
@@ -1007,7 +1030,7 @@ hook_event(HOOK_ON_MODS_LOADED, function()
     sHasModHiddenHud = hud_is_hidden()
 end)
 
-hook_chat_command("sgo", "- Opens Sharen's Game Overhaul's mod menu.", function()
+hook_chat_command("sge", "- Opens Sharen's Game Enhancer's mod menu.", function()
     sMenuOpen = true
     sCurrSection = 1
     sCurrOption = nil

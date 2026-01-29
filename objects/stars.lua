@@ -6,13 +6,11 @@ local is_star_collected = function(o)
 
     (gLevelValues.useGlobalStarIds ~= 0 and (starId / 7) - 1 or gNetworkPlayers[0].currCourseNum - 1))
 
-    if currentLevelStarFlags & (1 << (gLevelValues.useGlobalStarIds ~= 0 and math_fmod(starId, 7) or starId)) == 0 then
+    if currentLevelStarFlags & (1 << (gLevelValues.useGlobalStarIds ~= 0 and math_fmod(starId, 7) or starId)) == 0 or get_id_from_behavior(o.behavior) == celebStarNewID then
         return false
     end
     return true
 end
-
-local sStarDist = 0
 
 ---@param o Object
 local spawn_rays_on_spawn = function(o)
@@ -31,39 +29,43 @@ local environment_effects = function(o)
     local m = gMarioStates[0]
     local c = gMarioStates[0].area.camera
     local important = is_very_important(o)
-    local setting = gSGOLocalSettings.starsDarkenWorld
+    local setting = gSGELocalSettings.starsDarkenWorld
 
-    if m == nil or c == nil or (setting == 2 and not important) or (setting == 3) or (is_star_collected(o) and get_id_from_behavior(o.behavior) ~= celebStarNewID) then
+    if m == nil or c == nil or (setting == 2 and not important) or (setting == 3) or (is_star_collected(o)) then
         return
     end
-
-    local dist = dist_between_objects(m.marioObj, o)
-    local distMax = not important and STAR_ENV_MAX_DIST or IMPORTANT_ENV_MAX_DIST
 
     if o.oLightID then
         local offset = is_very_important(o) and 200 or 30
         le_set_light_pos(o.oLightID, o.oPosX, o.oPosY + offset, o.oPosZ)
     end
 
-    if dist > distMax then
-        if gNearestStar == o then gNearestStar = nil end
-        return
-    end
+    local dist = dist_between_objects(m.marioObj, o)
+    local distMax = not important and STAR_ENV_MAX_DIST or IMPORTANT_ENV_MAX_DIST
 
     if gNearestStar == o then
-        sStarDist = dist
-    else
-        if not gNearestStar or (sStarDist > dist and get_id_from_behavior(gNearestStar.behavior) ~= celebStarNewID) then
-            gNearestStar = o
-        end
+        gStarDist = dist
+    elseif (not gNearestStar or gStarDist > dist) and dist < distMax then
+        gNearestStar = o
     end
 end
 
 ---@param o Object
 local celeb_star_init = function(o)
-    o.oFlags = OBJ_FLAG_UPDATE_GFX_POS_AND_ANGLE
+    o.oFlags = o.oFlags | OBJ_FLAG_UPDATE_GFX_POS_AND_ANGLE
     local level = gNetworkPlayers[0].currLevelNum
     local s
+
+    if o.oBehParams == 1 then
+        spawn_rays(o)
+        o.oLightID = le_add_light(o.oPosX, o.oPosY, o.oPosZ, 0xFF, 0xD0, 0, STAR_ENV_MAX_DIST, 4)
+
+        obj_scale(o, 1)
+        o.oVelY = -10
+        o.oAngleVelYaw = deg_to_hex(-16)
+        o.oAction = CELEB_STAR_ACT_LEAVE
+        return
+    end
 
     if o.parentObj then
         o.oMoveAngleYaw = o.parentObj.header.gfx.angle.y + 0x8000
@@ -145,7 +147,7 @@ end
 ---@param o Object
 local celeb_star_face_camera = function(o)
     local m = o.parentObj and gMarioStates[network_local_index_from_global(o.parentObj.globalPlayerIndex)]
-    local s = m and gPlayerSyncTable[network_local_index_from_global(m.playerIndex)]
+    local s = m and gPlayerSyncTable[m.playerIndex]
     local playNewAnim = s and s.newAnims
 
     if playNewAnim then
@@ -179,6 +181,7 @@ local celeb_star_face_camera = function(o)
         end
 
         if o.oTimer == 59 then
+            le_remove_light(o.oLightID)
             obj_mark_for_deletion(o)
         end
     end
@@ -226,6 +229,7 @@ local celeb_star_leave = function(o)
     if o.oTimer >= 75 then
         cur_obj_scale(o.header.gfx.scale.x - 0.05)
         if o.header.gfx.scale.x <= 0 then
+            le_remove_light(o.oLightID)
             obj_mark_for_deletion(o)
         end
     end
@@ -233,8 +237,6 @@ end
 
 ---@param o Object
 local celeb_star_loop = function(o)
-    local isLocal = gMarioStates[network_local_index_from_global(o.parentObj.globalPlayerIndex)].playerIndex == 0
-
     switch(o.oAction, {
         [CELEB_STAR_ACT_SPIN_AROUND_MARIO] = function()
             celeb_star_spin_around_mario(o)
@@ -250,22 +252,17 @@ local celeb_star_loop = function(o)
         end,
     })
 
-    if gSGOLocalSettings.starsDarkenWorld == 1 and isLocal then
-        gNearestStar = o
-    end
-
     environment_effects(o)
 end
 
 ---@param o Object
-local koopa_shell_tilt = function(o)
-    local m = gMarioStates[o.heldByPlayerIndex]
-    local s = gPlayerSyncTable[m.playerIndex]
-    if m == nil or o.oAction ~= 1 or not s.newAnims then return end
-    local angle = m.marioObj.header.gfx.angle.z
+local hidden_star_celebrate = function(o)
+    local m = gMarioStates[0]
 
-    o.oFaceAngleRoll = angle
-    o.oGraphYOffset = 28 * math.abs(sins(angle))
+    if o.oTimer == 0 and o.oHiddenStarTriggerCounter >= m.area.numSecrets then
+        play_character_sound(m, CHAR_SOUND_HAHA_2)
+        audio_sample_play(SOUND_CLAPPING, m.area.camera.pos, 1)
+    end
 end
 
 starNewID = hook_behavior(id_bhvStar, OBJ_LIST_LEVEL, false, spawn_rays_on_spawn, environment_effects)
@@ -279,4 +276,9 @@ grandStarNewID = hook_behavior(id_bhvGrandStar, OBJ_LIST_LEVEL, false, spawn_ray
 hook_behavior(id_bhvUkikiCageStar, OBJ_LIST_LEVEL, false, spawn_rays_on_spawn, nil)
 bowserKeyNewID = hook_behavior(id_bhvBowserKey, OBJ_LIST_LEVEL, false, spawn_rays_on_spawn, environment_effects)
 
-koopaShellNewID = hook_behavior(id_bhvKoopaShell, OBJ_LIST_LEVEL, false, nil, koopa_shell_tilt)
+hook_event(HOOK_ON_OBJECT_UNLOAD, function(o)
+    if o == gNearestStar then
+        gStarDist = 0
+        gNearestStar = nil
+    end
+end)

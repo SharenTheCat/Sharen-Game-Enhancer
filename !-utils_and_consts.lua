@@ -1,7 +1,5 @@
 local math_max, math_min, math_floor = math.max, math.min, math.floor
 
-OBJ_LOOKING_RANGE = 1000
-
 deg_to_hex = function(x)
     if not x then return end
     return x * 0x10000 / 360
@@ -66,6 +64,11 @@ switch = function(case, table, ...)
     else
         return table["default"] and table["default"]() or nil
     end
+end
+
+particle_spawn_circle = function(current, total, randOffset)
+    local angleOffset = randOffset == 0 and 0 or (random_float() * deg_to_hex(randOffset)) - deg_to_hex(randOffset / 2)
+    return deg_to_hex(360) / total * current + angleOffset
 end
 
 angle_to_point = function(from, to)
@@ -162,6 +165,12 @@ set_shade = function(m, color)
     m.marioBodyState.shadeB = color.b
 end
 
+gNearestStar = nil
+gStarDist = 0
+gLightDarken = 2
+gTalkPrompt = false
+gWaitedForLightsOnOtherMods = false
+
 ACT_BATTLE_STANCE = allocate_mario_action(ACT_GROUP_STATIONARY | ACT_FLAG_STATIONARY | ACT_FLAG_IDLE | ACT_FLAG_ALLOW_FIRST_PERSON | ACT_FLAG_PAUSE_EXIT)
 ACT_ROLLOUT_LAND = allocate_mario_action(ACT_GROUP_STATIONARY | ACT_FLAG_STATIONARY | ACT_FLAG_ALLOW_FIRST_PERSON | ACT_FLAG_PAUSE_EXIT)
 ACT_LOOKING = allocate_mario_action(ACT_GROUP_STATIONARY | ACT_FLAG_STATIONARY | ACT_FLAG_IDLE | ACT_FLAG_ALLOW_FIRST_PERSON | ACT_FLAG_PAUSE_EXIT)
@@ -169,6 +178,8 @@ ACT_INTO_ABYSS = allocate_mario_action(ACT_GROUP_AIRBORNE | ACT_FLAG_AIR | ACT_F
 ACT_FROZEN_WATER = allocate_mario_action(ACT_GROUP_SUBMERGED | ACT_FLAG_STATIONARY | ACT_FLAG_WATER_OR_TEXT | ACT_FLAG_SWIMMING | ACT_FLAG_SWIMMING_OR_FLYING | ACT_FLAG_INTANGIBLE)
 ACT_FROZEN = allocate_mario_action(ACT_GROUP_CUTSCENE | ACT_FLAG_AIR | ACT_FLAG_INTANGIBLE)
 ACT_BURNT = allocate_mario_action(ACT_GROUP_CUTSCENE | ACT_FLAG_AIR | ACT_FLAG_INTANGIBLE)
+
+OBJ_LOOKING_RANGE = 1000
 
 TEMPERATURE_MAX_VALUE = 120
 
@@ -180,7 +191,9 @@ IMPORTANT_ENV_MAX_DIST = 2000
 CELEB_STAR_ACT_JUMP_TO_CENTER = 2
 CELEB_STAR_ACT_LEAVE = 3
 
-CUTSCENE_SGO_DEATH = 250
+CUTSCENE_SGE_DEATH = 251
+
+SOUND_CLAPPING = audio_sample_load("clapping.mp3")
 
 E_MODEL_BURN_SMOKE_FIX = smlua_model_util_get_id("burn_smoke_fix_geo")
 E_MODEL_SMOKE_TRANSPARENT = smlua_model_util_get_id("smoke_transparency_geo")

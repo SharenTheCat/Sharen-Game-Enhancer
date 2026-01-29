@@ -126,7 +126,6 @@ local change_palette_and_shading = function(m)
     local s = gPlayerSyncTable[m.playerIndex]
     local np = gNetworkPlayers[m.playerIndex]
     local globalTimer = get_global_timer()
-    local notInLLL = not (level_is_vanilla_level(LEVEL_LLL) and np.currLevelNum == LEVEL_LLL)
     local mGfx = m.marioObj.header.gfx
 
     local burntActions = {
@@ -146,7 +145,8 @@ local change_palette_and_shading = function(m)
 
     local curShade = get_shade(m)
 
-    if m.health < 0x300 and gSGOLocalSettings.lowHpTint then
+    --- Red Shading ---
+    if in_between(m.health, 0xFF, 0x300, false) and gSGELocalSettings.lowHpTint then
         local sinMult = m.health < 0x200 and 0.1 or 0.06
         local lerpPercent = m.health > 0xFF and math_sin(globalTimer * sinMult) * 0.5 + 0.5 or 1
         curShade = color_lerp(curShade, {r = 0xD0, g = 0x30, b = 0x30}, lerpPercent)
@@ -155,6 +155,7 @@ local change_palette_and_shading = function(m)
         e.resettedShade = false
     end
 
+    --- "Temperature" Calculation ---
     if (burntActions[m.action] and s.colorBody) or burntActions[m.action] == 1 then
         local add = e.temperature < 0 and 8 or 4
         e.temperature = math_min(e.temperature + add, TEMPERATURE_MAX_VALUE)
@@ -169,15 +170,17 @@ local change_palette_and_shading = function(m)
         e.temperature = approach_f32(e.temperature, 0, add, sub)
     end
 
-    if gSGOLocalSettings.soak then
-        local x = m.marioBodyState.headPos.x - mGfx.pos.x
-        local z = m.marioBodyState.headPos.z - mGfx.pos.z
-        local topDirOffset = 50 * sins(atan2s(math.sqrt(x ^ 2 + z ^ 2), m.marioBodyState.headPos.y - mGfx.pos.y))
+    --- Soaked Level Calculation ---
+    local x = m.marioBodyState.headPos.x - mGfx.pos.x
+    local z = m.marioBodyState.headPos.z - mGfx.pos.z
+    local topDirOffset = 50 * sins(atan2s(math.sqrt(x ^ 2 + z ^ 2), m.marioBodyState.headPos.y - mGfx.pos.y))
+    local modelTop = m.marioBodyState.headPos.y + topDirOffset - mGfx.pos.y
 
-        local modelTop = m.marioBodyState.headPos.y + topDirOffset - mGfx.pos.y
+    if gSGELocalSettings.soak then
+         local notInLLL = not (level_is_vanilla_level(LEVEL_LLL) and gNetworkPlayers[0].currLevelNum == LEVEL_LLL)
         local wetPercentage = (m.waterLevel - mGfx.pos.y) / modelTop
 
-         -- what this and the billion variables above are doing is roughly take your charater's current height and determining how much of their
+        -- what this and the billion variables above are doing is roughly take your charater's current height and determining how much of their
         -- body has been in water by comparing it to the water level, this means is that for example, more of your body will get soaked if you
         -- crouch while standing in shallow water or if your character is just smaller than mario
         if mGfx.pos.y + (modelTop * e.wetLevel) <= m.waterLevel and notInLLL and m.waterLevel > gLevelValues.floorLowerLimit then
@@ -188,27 +191,12 @@ local change_palette_and_shading = function(m)
         elseif e.wetLevel > 0 then
             e.wetLevel = math_max(e.wetLevel - 0.005, 0)
         end
-
-        if e.wetLevel > 0 and math_fmod(globalTimer, 7) == 0 then
-            local spawnYPos = mGfx.pos.y + (modelTop * e.wetLevel) * random_float()
-            if spawnYPos > m.waterLevel then
-                spawn_non_sync_object(id_bhvWetDroplet, E_MODEL_WHITE_PARTICLE_SMALL, mGfx.pos.x, spawnYPos, mGfx.pos.z, function(o)
-                    local offset = random_float() * 10 + 25
-                    o.oMoveAngleYaw = random_u16()
-
-                    o.oVelX = offset * sins(o.oMoveAngleYaw)
-                    o.oVelY = spawnYPos - m.pos.y
-                    o.oVelZ = offset * coss(o.oMoveAngleYaw)
-
-                    o.globalPlayerIndex = gNetworkPlayers[m.playerIndex].globalIndex
-                end)
-            end
-        end
     elseif e.wetLevel > 0 then
         e.wetLevel = 0
         e.wetTimer = 0
     end
 
+    --- Apply Colors ---
     if m.action ~= ACT_SHOCKED and m.action ~= ACT_WATER_SHOCKED then
         if (e.temperature ~= 0 or e.wetLevel > 0) and m.marioBodyState.modelState & MODEL_STATE_METAL == 0 then
             local wetColor = {r = 0, g = 0, b = 0x10}
@@ -222,6 +210,22 @@ local change_palette_and_shading = function(m)
                     function(o)
                         o.oBehParams = 1
                         o.parentObj = m.marioObj
+                    end)
+                end
+            end
+
+            if e.wetLevel > 0 and math_fmod(globalTimer, 7) == 0 then
+                local spawnYPos = mGfx.pos.y + (modelTop * e.wetLevel) * random_float()
+                if spawnYPos > m.waterLevel then
+                    spawn_non_sync_object(id_bhvWetDroplet, E_MODEL_WHITE_PARTICLE_SMALL, mGfx.pos.x, spawnYPos, mGfx.pos.z, function(o)
+                        local offset = random_float() * 10 + 25
+                        o.oMoveAngleYaw = random_u16()
+
+                        o.oVelX = offset * sins(o.oMoveAngleYaw)
+                        o.oVelY = spawnYPos - m.pos.y
+                        o.oVelZ = offset * coss(o.oMoveAngleYaw)
+
+                        o.globalPlayerIndex = gNetworkPlayers[m.playerIndex].globalIndex
                     end)
                 end
             end
@@ -367,6 +371,7 @@ local handle_body_rotation = function(m, id)
 
     local intendedDYaw = s16(m.intendedYaw - m.faceAngle.y)
 
+    --- Control Mario's Head Movement ---
     if s.lookAngleYaw ~= nil and ((m.action == ACT_LOOKING and m.actionArg == 0) or lookAnims[id]) then
         headRotX = s.lookAnglePitch
         headRotY = s.lookAngleYaw
@@ -380,6 +385,8 @@ local handle_body_rotation = function(m, id)
         headRotY = atan2s(m.vel.z, m.vel.x) ~= 0 and s16(atan2s(m.vel.z, m.vel.x) - m.faceAngle.y) or 0
     end
 
+    --- Control Mario's Torso Movement... ---
+    -- ...While straffing
     if lookOnStrafeActs[m.action] and s.airStrafeMove then
         if m.action ~= ACT_DIVE then
             if not skipStrafeMove then
@@ -402,6 +409,7 @@ local handle_body_rotation = function(m, id)
         end
     end
 
+    -- ...On the new animations
     if s.newAnims then
         if m.action == ACT_WALKING and m.actionTimer == 3 then
             torsoRotX = deg_to_hex(12)
@@ -483,86 +491,76 @@ local update_mario_body = function(m, id)
     local frame = m.marioObj.header.gfx.animInfo.animFrame
     local mBody = m.marioBodyState
 
-    local openHandCond = {
-        [MARIO_ANIM_SKID_ON_GROUND] = true,
-        [MARIO_ANIM_STOP_SKID] = frame < 14,
-        [MARIO_ANIM_DOUBLE_JUMP_RISE] = frame >= 2,
-        [MARIO_ANIM_DOUBLE_JUMP_FALL] = true,
-        [MARIO_ANIM_TRIPLE_JUMP] = not in_between(frame, 14, 20, false),
-        [MARIO_ANIM_TRIPLE_JUMP_LAND] = in_between(frame, 4, 33, false),
-        [MARIO_ANIM_BACKFLIP] = not in_between(frame, 12, 27, false),
-        [MARIO_ANIM_SLIDEFLIP] = not in_between(frame, 9, 16, false),
-        [MARIO_ANIM_GENERAL_FALL] = true,
-        [MARIO_ANIM_FAST_LONGJUMP] = true,
-        [MARIO_ANIM_CROUCH_FROM_FAST_LONGJUMP] = frame < 5,
-        [MARIO_ANIM_SLOW_LONGJUMP] = true,
-        [MARIO_ANIM_CROUCH_FROM_SLOW_LONGJUMP] = frame < 4,
-        [MARIO_ANIM_SLIDEJUMP] = frame <= 4,
-        [MARIO_ANIM_START_WALLKICK] = true,
-        ["FIRSTIE"] = true,
-        [MARIO_ANIM_DIVE] = frame > 3,
-        ["NOSEDIVE"] = true,
-        [MARIO_ANIM_SLIDE_DIVE] = true,
-        ["DIVE_ROLLOUT"] = true,
-        ["FAST_RUN"] = true,
-        [MARIO_ANIM_SLIDE] = true,
-        ["SLIDE_FRONT_NEUTRAL"] = true,
-        ["SLIDE_NEUTRAL_FRONT"] = true,
-        ["SLIDE_FORWARD"]  = true,
-        [MARIO_ANIM_STOP_SLIDE] = frame < 9,
-        [MARIO_ANIM_FALL_FROM_SLIDE] = true,
-        [MARIO_ANIM_GROUND_POUND_LANDING] = frame >= 3,
-        [MARIO_ANIM_TRIPLE_JUMP_GROUND_POUND] = frame <= 3,
-        [MARIO_ANIM_SLIDE_KICK] = frame > 7,
-        [MARIO_ANIM_CROUCH_FROM_SLIDE_KICK] = frame <= 6,
-        [MARIO_ANIM_FALL_FROM_SLIDE_KICK] = true,
-        [MARIO_ANIM_SOFT_BACK_KB] = frame < 17,
-        [MARIO_ANIM_SOFT_FRONT_KB] = frame < 17,
-        [MARIO_ANIM_BACKWARD_AIR_KB] = true,
-        [MARIO_ANIM_AIR_FORWARD_KB] = true,
-        [MARIO_ANIM_BACKWARD_KB] = frame < 23,
-        [MARIO_ANIM_FORWARD_KB] = frame < 24,
-        [MARIO_ANIM_FALL_OVER_BACKWARDS] = frame < 36,
-        [MARIO_ANIM_LAND_ON_STOMACH] = frame < 19,
-        [MARIO_ANIM_STAND_UP_FROM_LAVA_BOOST] = in_between(frame, 1, 9, false),
-        [MARIO_ANIM_FAST_LEDGE_GRAB] = in_between(frame, 1, 7, true),
-        [MARIO_ANIM_DYING_ON_BACK] = true,
-        ["SPEEDKICK"] = frame >= 6,
-        [MARIO_ANIM_RIDING_SHELL] = true,
-        [MARIO_ANIM_JUMP_RIDING_SHELL] = true,
-        ["SHELL_FALL"] = true,
-        [MARIO_ANIM_START_RIDING_SHELL] = true,
-        ["SHELL_SLOW"] = true,
-        ["SOFT_BONK"] = true,
-        ["FAR_FALL"] = true,
-        [MARIO_ANIM_DYING_FALL_OVER] = frame >= 73,
-        ["FREEZE_BOOST"] = frame >= 28,
-        ["FREEZE_BOOST_LAND"] = frame < 9,
-        ["STEEP_JUMP"] = true,
-    }
-
-    local kbEyesCond = {
-        [MARIO_ANIM_SOFT_BACK_KB] = frame < 17,
-        [MARIO_ANIM_SOFT_FRONT_KB] = frame < 17,
-        [MARIO_ANIM_BACKWARD_AIR_KB] = true,
-        [MARIO_ANIM_AIR_FORWARD_KB] = true,
-        [MARIO_ANIM_BACKWARD_KB] = frame < 16,
-        [MARIO_ANIM_FORWARD_KB] = frame < 16,
-        [MARIO_ANIM_FALL_OVER_BACKWARDS] = frame < 30,
-        [MARIO_ANIM_LAND_ON_STOMACH] = frame < 40,
-    }
-
-    local rightHandOpenCond = {
-        [MARIO_ANIM_FALL_OVER_BACKWARDS] = frame < 67,
-        [MARIO_ANIM_CLIMB_DOWN_LEDGE] = frame < 4,
-        [MARIO_ANIM_DYING_ON_STOMACH] = frame >= 40,
-        [MARIO_ANIM_COUGHING] = in_between(frame, 5, 21, true) or frame >= 43
-    }
-
     if s.newAnims then
         local fallDist = m.peakHeight - m.pos.y
 
-        --hands
+        --- Control Mario's hands'... ---
+        -- ...Open/Closed State
+
+        local openHandCond = {
+            [MARIO_ANIM_SKID_ON_GROUND] = true,
+            [MARIO_ANIM_STOP_SKID] = frame < 14,
+            [MARIO_ANIM_DOUBLE_JUMP_RISE] = frame >= 2,
+            [MARIO_ANIM_DOUBLE_JUMP_FALL] = true,
+            [MARIO_ANIM_TRIPLE_JUMP] = not in_between(frame, 14, 20, false),
+            [MARIO_ANIM_TRIPLE_JUMP_LAND] = in_between(frame, 4, 33, false),
+            [MARIO_ANIM_BACKFLIP] = not in_between(frame, 12, 27, false),
+            [MARIO_ANIM_SLIDEFLIP] = not in_between(frame, 9, 16, false),
+            [MARIO_ANIM_GENERAL_FALL] = true,
+            [MARIO_ANIM_FAST_LONGJUMP] = true,
+            [MARIO_ANIM_CROUCH_FROM_FAST_LONGJUMP] = frame < 5,
+            [MARIO_ANIM_SLOW_LONGJUMP] = true,
+            [MARIO_ANIM_CROUCH_FROM_SLOW_LONGJUMP] = frame < 4,
+            [MARIO_ANIM_SLIDEJUMP] = frame <= 4,
+            [MARIO_ANIM_START_WALLKICK] = true,
+            ["FIRSTIE"] = true,
+            [MARIO_ANIM_DIVE] = frame > 3,
+            ["NOSEDIVE"] = true,
+            [MARIO_ANIM_SLIDE_DIVE] = true,
+            ["DIVE_ROLLOUT"] = true,
+            ["FAST_RUN"] = true,
+            [MARIO_ANIM_SLIDE] = true,
+            ["SLIDE_FRONT_NEUTRAL"] = true,
+            ["SLIDE_NEUTRAL_FRONT"] = true,
+            ["SLIDE_FORWARD"]  = true,
+            [MARIO_ANIM_STOP_SLIDE] = frame < 9,
+            [MARIO_ANIM_FALL_FROM_SLIDE] = true,
+            [MARIO_ANIM_GROUND_POUND_LANDING] = frame >= 3,
+            [MARIO_ANIM_TRIPLE_JUMP_GROUND_POUND] = frame <= 3,
+            [MARIO_ANIM_SLIDE_KICK] = frame > 7,
+            [MARIO_ANIM_CROUCH_FROM_SLIDE_KICK] = frame <= 6,
+            [MARIO_ANIM_FALL_FROM_SLIDE_KICK] = true,
+            [MARIO_ANIM_SOFT_BACK_KB] = frame < 17,
+            [MARIO_ANIM_SOFT_FRONT_KB] = frame < 17,
+            [MARIO_ANIM_BACKWARD_AIR_KB] = true,
+            [MARIO_ANIM_AIR_FORWARD_KB] = true,
+            [MARIO_ANIM_BACKWARD_KB] = frame < 23,
+            [MARIO_ANIM_FORWARD_KB] = frame < 24,
+            [MARIO_ANIM_FALL_OVER_BACKWARDS] = frame < 36,
+            [MARIO_ANIM_LAND_ON_STOMACH] = frame < 19,
+            [MARIO_ANIM_STAND_UP_FROM_LAVA_BOOST] = in_between(frame, 1, 9, false),
+            [MARIO_ANIM_FAST_LEDGE_GRAB] = in_between(frame, 1, 7, true),
+            [MARIO_ANIM_DYING_ON_BACK] = true,
+            ["SPEEDKICK"] = frame >= 6,
+            [MARIO_ANIM_RIDING_SHELL] = true,
+            [MARIO_ANIM_JUMP_RIDING_SHELL] = true,
+            ["SHELL_FALL"] = true,
+            [MARIO_ANIM_START_RIDING_SHELL] = true,
+            ["SHELL_SLOW"] = true,
+            ["SOFT_BONK"] = true,
+            ["FAR_FALL"] = true,
+            [MARIO_ANIM_DYING_FALL_OVER] = frame >= 73,
+            ["FREEZE_BOOST"] = frame >= 28,
+            ["FREEZE_BOOST_LAND"] = frame < 9,
+            ["STEEP_JUMP"] = true,
+        }
+
+        local rightHandOpenCond = {
+            [MARIO_ANIM_FALL_OVER_BACKWARDS] = frame < 67,
+            [MARIO_ANIM_CLIMB_DOWN_LEDGE] = frame < 4,
+            [MARIO_ANIM_DYING_ON_STOMACH] = frame >= 40,
+            [MARIO_ANIM_COUGHING] = in_between(frame, 5, 21, true) or frame >= 43
+        }
 
         if openHandCond[id] then
             mBody.handState = MARIO_HAND_OPEN
@@ -582,6 +580,8 @@ local update_mario_body = function(m, id)
         elseif (id == MARIO_ANIM_RETURN_FROM_STAR_DANCE and frame <= 2) or id == "STAR_FALL" then
             mBody.handState = MARIO_HAND_PEACE_SIGN
         end
+
+        -- ...Punch State
 
         if (id == MARIO_ANIM_SINGLE_JUMP or id == "JUMP_FALL") and in_between(frame, 3, 13, true) then
             mBody.punchState = (0 << 6) | 3
@@ -603,31 +603,56 @@ local update_mario_body = function(m, id)
             mBody.punchState = (2 << 6) | 5
         end
 
-        -- eyes
+        --- Control Mario's eyes ---
+        -- Simple Cases
 
-        if (id == MARIO_ANIM_IDLE_HEAD_RIGHT and in_between(frame, 4, 22, true)) or
-        (id == MARIO_ANIM_CROUCHING and in_between(frame, 2, 30, true)) then
-            mBody.eyeState = MARIO_EYES_LOOK_LEFT
+        local kbEyesCond = {
+            [MARIO_ANIM_SOFT_BACK_KB] = frame < 17,
+            [MARIO_ANIM_SOFT_FRONT_KB] = frame < 17,
+            [MARIO_ANIM_BACKWARD_AIR_KB] = true,
+            [MARIO_ANIM_AIR_FORWARD_KB] = true,
+            [MARIO_ANIM_BACKWARD_KB] = frame < 16,
+            [MARIO_ANIM_FORWARD_KB] = frame < 16,
+            [MARIO_ANIM_FALL_OVER_BACKWARDS] = frame < 30,
+            [MARIO_ANIM_LAND_ON_STOMACH] = frame < 40,
+        }
 
-        elseif id == MARIO_ANIM_TURNING_PART1 or (id == MARIO_ANIM_TURNING_PART2 and frame <= 4) or
-        (id == MARIO_ANIM_IDLE_HEAD_LEFT and in_between(frame, 4, 22, true)) or
-        (id == MARIO_ANIM_CROUCHING and in_between(frame, 31, 60, true)) or
-        (id == MARIO_ANIM_SLIDE_JUMP and frame < 5) or id == MARIO_ANIM_START_WALLKICK then
-            mBody.eyeState = MARIO_EYES_LOOK_RIGHT
+        local leftEyesCond = {
+            [MARIO_ANIM_IDLE_HEAD_RIGHT] = in_between(frame, 4, 22, true),
+        }
 
-        elseif id == MARIO_ANIM_GROUND_POUND or
-        ((id == MARIO_ANIM_START_GROUND_POUND or id == MARIO_ANIM_TRIPLE_JUMP_GROUND_POUND or id == "GP_BACKWARD") and frame >= 5) or
-        (id == MARIO_ANIM_START_RIDING_SHELL and frame < 23) then
-            mBody.eyeState = MARIO_EYES_LOOK_DOWN
-        end
+        local rightEyesCond = {
+            [MARIO_ANIM_TURNING_PART1] = true,
+            [MARIO_ANIM_TURNING_PART2] = frame <= 4,
+            [MARIO_ANIM_IDLE_HEAD_LEFT] = in_between(frame, 4, 22, true),
+            [MARIO_ANIM_SLIDEJUMP] = frame < 5,
+            [MARIO_ANIM_START_WALLKICK] = true,
+        }
+
+        local downEyesCond = {
+            [MARIO_ANIM_GROUND_POUND] = true,
+            [MARIO_ANIM_START_GROUND_POUND] = frame >= 5,
+            [MARIO_ANIM_TRIPLE_JUMP_GROUND_POUND] = frame >= 5,
+            ["GP_BACKWARD"] = frame >= 5,
+            [MARIO_ANIM_START_RIDING_SHELL] = frame <= 23,
+        }
 
         if (m.health <= 0xFF and m.action ~= ACT_DROWNING and m.action ~= ACT_BURNT) or
-        m.action == ACT_SHOCKED or m.action == ACT_WATER_SHOCKED 
+        m.action == ACT_SHOCKED or m.action == ACT_WATER_SHOCKED
         or (m.action == ACT_SQUISHED and m.actionState > 0) then
             mBody.eyeState = MARIO_EYES_DEAD
         end
 
-        if kbEyesCond[id] then
+        if leftEyesCond[id] then
+            mBody.eyeState = MARIO_EYES_LOOK_LEFT
+
+        elseif rightEyesCond[id] then
+            mBody.eyeState = MARIO_EYES_LOOK_RIGHT
+
+        elseif downEyesCond[id] then
+            mBody.eyeState = MARIO_EYES_LOOK_DOWN
+
+        elseif kbEyesCond[id] then
             if m.actionArg > 0 then
                 mBody.eyeState = MARIO_EYES_DEAD
             else
@@ -637,8 +662,17 @@ local update_mario_body = function(m, id)
                     mBody.eyeState = MARIO_EYES_HALF_CLOSED
                 end
             end
+
+        -- Complex Cases
         else
             switch(id, {
+                [MARIO_ANIM_CROUCHING] = function()
+                    if in_between(frame, 2, 30, true) then
+                        mBody.eyeState = MARIO_EYES_LOOK_LEFT
+                    elseif frame < 60 then
+                        mBody.eyeState = MARIO_EYES_LOOK_RIGHT
+                    end
+                end,
                 [MARIO_ANIM_FALL_OVER_BACKWARDS] = function()
                     if frame < 36 then
                         mBody.eyeState = MARIO_EYES_LOOK_LEFT
@@ -720,16 +754,16 @@ local update_mario_body = function(m, id)
             })
         end
 
-        -- lag behind shell in the air
+        --- Lag behind the shell in the air ---
 
         if m.action == ACT_RIDING_SHELL_JUMP or m.action == m.action == ACT_RIDING_SHELL_FALL then
             m.marioObj.header.gfx.pos.y = m.marioObj.header.gfx.pos.y - math.min(0, m.vel.y) * 0.35
         end
     end
 
-    -- dynamic pitch
+    --- Dynamic rotation while diving ---
 
-    if (m.action == ACT_DIVE or m.action == ACT_SLIDE_KICK) and gSGOLocalSettings.divePitch then
+    if (m.action == ACT_DIVE or m.action == ACT_SLIDE_KICK) and gSGELocalSettings.divePitch then
         local min = (e.animState > 0 and frame > 11) and -55 or -30
         local target = clamp(atan2s(m.forwardVel, m.vel.y), deg_to_hex(min), deg_to_hex(30))
 
@@ -737,15 +771,15 @@ local update_mario_body = function(m, id)
         m.marioObj.header.gfx.angle.x = -m.faceAngle.x
     end
 
-    -- ground pound fixes
+    --- Ground Pound Fixes ---
 
-    if gSGOLocalSettings.miscThings then
+    if gSGELocalSettings.miscThings then
         if m.action == ACT_GROUND_POUND then
             m.faceAngle.x = approach_f32(m.faceAngle.x, 0, deg_to_hex(6), deg_to_hex(6))
             m.faceAngle.z = approach_f32(m.faceAngle.z, 0, deg_to_hex(6), deg_to_hex(6))
 
             m.marioObj.header.gfx.angle.x = m.faceAngle.x
-            m.marioObj.header.gfx.angle.y = m.faceAngle.y -- fixes the sideflip bug
+            m.marioObj.header.gfx.angle.y = m.faceAngle.y -- Fixes the sideflip bug
             m.marioObj.header.gfx.angle.z = m.faceAngle.z
         elseif m.action == ACT_SLIDE_KICK_SLIDE then
             align_with_floor(m)
@@ -762,13 +796,13 @@ end
 
 ---@param m MarioState
 local squash_and_stretch = function(m)
-    if gSGOLocalSettings.squashStretch == 0 then return end
+    if gSGELocalSettings.squashStretch == 0 then return end
     local e = gMarioEnhance[m.playerIndex]
     local scaleFactor = 0
 
     if m.action & ACT_FLAG_AIR ~= 0 and m.action ~= ACT_FROZEN then
         if not in_between(e.prevVelY, m.vel.y - 12, m.vel.y + 12, true) then
-            -- prevent noticeable stutter when doing short hops
+            -- Prevent noticeable stutter when doing short hops
             if e.prevVelY / 4 == m.vel.y then
                 e.scaleGoal = e.scaleGoal / 2
             else
@@ -779,8 +813,8 @@ local squash_and_stretch = function(m)
             end
         end
 
-        -- jump animations usually have 1 or 2 "prelude" frames where mario is crouched preparing to leap, so we
-        -- give mario a squashing period so he stretches just as he actually leaps
+        -- Jump animations usually have 1 or 2 "prelude" frames where Mario is crouched preparing to leap, so we
+        -- give Mario a squashing period so he stretches just as he actually leaps
         if e.currScale <= 0 then
             scaleFactor = (e.scaleGoal ^ 1.3) * SQUASH_AND_STRETCH_MULT
             e.scaleGoal = approach_f32(e.scaleGoal, 0, 8, 8)
@@ -798,16 +832,16 @@ local squash_and_stretch = function(m)
         scaleFactor = (e.currScale ^ 1.2) * SQUASH_AND_STRETCH_MULT * 0.8
 
         if m.action & ACT_GROUP_MASK ~= ACT_GROUP_AUTOMATIC then
-            scaleFactor = -scaleFactor -- revert the squishing if you hang onto a pole or ledge
+            scaleFactor = -scaleFactor -- Revert the squishing if you hang onto a pole or ledge
         end
     end
 
     if m.action == ACT_BURNT and m.actionState == 1 then
         m.marioObj.header.gfx.scale.y = 1 - 0.75 * clamp(m.actionTimer / 24, 0, 1)
     elseif m.squishTimer == 0 then
-        m.marioObj.header.gfx.scale.x = 1 - scaleFactor * 0.5 * gSGOLocalSettings.squashStretch
-        m.marioObj.header.gfx.scale.y = 1 + scaleFactor * gSGOLocalSettings.squashStretch
-        m.marioObj.header.gfx.scale.z = 1 - scaleFactor * 0.5 * gSGOLocalSettings.squashStretch
+        m.marioObj.header.gfx.scale.x = 1 - scaleFactor * 0.5 * gSGELocalSettings.squashStretch
+        m.marioObj.header.gfx.scale.y = 1 + scaleFactor * gSGELocalSettings.squashStretch
+        m.marioObj.header.gfx.scale.z = 1 - scaleFactor * 0.5 * gSGELocalSettings.squashStretch
     end
 end
 
@@ -845,7 +879,7 @@ local play_sounds_on_anim = function(m, id)
                     play_sound_and_spawn_particles(m, SOUND_ACTION_TERRAIN_JUMP, 0)
                 end
 
-                -- fun fact, the hard backward kb action is already set to play this sound at this exact frame
+                -- Fun fact, the hard backward kb action is already set to play this sound at this exact frame
                 -- but only does if you died and got kicked back to the castle for some reason lol
             elseif is_anim_past_frame(m, 69) ~= 0 then
                 play_mario_landing_sound(m, SOUND_ACTION_TERRAIN_LANDING)
@@ -896,10 +930,10 @@ local play_sounds_on_anim = function(m, id)
                 [24] = 1.29,
                 [34] = 0.82,
             }
-            --spin
+            -- Spin
             if spinFrames[frame] then
                 play_sound_with_freq_scale(SOUND_ACTION_SPIN, m.marioObj.header.gfx.cameraToObject, spinFrames[frame])
-            --peace sign
+            -- Peace sign
             elseif is_anim_past_frame(m, 40) ~= 0 then
                 play_mario_heavy_landing_sound(m, SOUND_ACTION_TERRAIN_LANDING)
             elseif is_anim_past_frame(m, 50) ~= 0 then
@@ -971,12 +1005,16 @@ run_animations = function(m)
     local id = animInfo.animID
     local frame = animInfo.animFrame
 
-    if gSGOLocalSettings.miscThings and id == CHAR_ANIM_DROWNING_PART1 then
+    --- Spawn bubbles while drowning ---
+    if gSGELocalSettings.miscThings and id == CHAR_ANIM_DROWNING_PART1 then
+        -- Wario has prolonged screams instead of random glubs, so we handle him differently
         if m.character.type ~= CT_WARIO then
             local glub = sGlubSoundTable[m.character.type][frame]
 
             if glub then
                 local amount = 5 + 4 * glub
+
+                -- Calculate Mario's current head rotation
                 local rot = gVec3sZero()
                 for i = MARIO_ANIM_PART_ROOT, MARIO_ANIM_PART_HEAD + 1 do
                     vec3s_add(rot, m.marioBodyState.animPartsRot[i])
@@ -984,6 +1022,7 @@ run_animations = function(m)
                 rot.x = -(rot.x - deg_to_hex(90)) - m.marioObj.header.gfx.angle.x
                 rot.y = m.marioObj.header.gfx.angle.y + rot.y
 
+                -- Spawn the bubbles
                 local offset = 24
                 local spawnPos = {
                     x = m.marioBodyState.headPos.x + offset * sins(rot.y) * coss(rot.x),
@@ -1002,6 +1041,7 @@ run_animations = function(m)
                 end
             end
         elseif frame & 1 == 0 and (in_between(frame, 3, 32, true) or in_between(frame, 41, 76, true)) then
+            -- Calculate Wario's current head rotation
             local rot = gVec3sZero()
             for i = MARIO_ANIM_PART_ROOT, MARIO_ANIM_PART_HEAD + 1 do
                 vec3s_add(rot, m.marioBodyState.animPartsRot[i])
@@ -1009,6 +1049,7 @@ run_animations = function(m)
             rot.x = -(rot.x - deg_to_hex(90)) - m.marioObj.header.gfx.angle.x
             rot.y = m.marioObj.header.gfx.angle.y + rot.y
 
+            -- Spawn the bubbles
             local offset = 24
             local spawnPos = {
                 x = m.marioBodyState.headPos.x + offset * sins(rot.y) * coss(rot.x),
@@ -1026,9 +1067,11 @@ run_animations = function(m)
         end
     end
 
+    --- Handle the new animations ---
     if registeredAnims[id] and s.newAnims then
         local fallDist = m.peakHeight - m.pos.y
 
+        -- Custom animation cases
         switch(id, {
         [MARIO_ANIM_SINGLE_JUMP] = function()
             if m.action == ACT_BURNING_JUMP then
@@ -1089,8 +1132,8 @@ run_animations = function(m)
                 end
             end
 
-            -- setting the accel directly without the function breaks is_anim_past_frame
-            -- likely doesnt matter but idk
+            -- Setting the accel directly without the function breaks is_anim_past_frame
+            -- Likely doesnt matter but idk
             set_mario_anim_with_accel(m, animInfo.animID, accel)
         end,
         [MARIO_ANIM_SLIDE] = function()
@@ -1099,23 +1142,23 @@ run_animations = function(m)
             local holdingFront = in_between(intendedDYaw, deg_to_hex(-65), deg_to_hex(65), true) and m.intendedMag >= 12
             local playBackAnim = e.animState & 1 ~= 0
 
-            if e.animState == 0 then -- neutral anim
+            if e.animState == 0 then -- Neutral anim
                 if holdingBack or holdingFront then
                     e.animState = holdingBack and 1 or 2
                 end
-            elseif e.animState <= 2 then -- transition into directional anim
+            elseif e.animState <= 2 then -- Transition into directional anim
                 id = playBackAnim and "SLIDE_NEUTRAL_BACK" or "SLIDE_NEUTRAL_FRONT"
 
                 if frame == 0 then
                     e.animState = playBackAnim and 3 or 4
                 end
-            elseif e.animState <= 4 then -- directional anim
+            elseif e.animState <= 4 then -- Directional anim
                 id = playBackAnim and "SLIDE_BACKWARD" or "SLIDE_FORWARD"
 
                 if (playBackAnim and not holdingBack) or (not playBackAnim and not holdingFront) then
                     e.animState = playBackAnim and 5 or 6
                 end
-            else -- transition back to neutral
+            else -- Transition back to neutral
                 id = playBackAnim and "SLIDE_BACK_NEUTRAL" or "SLIDE_FRONT_NEUTRAL"
 
                 if is_anim_at_end(m) ~= 0 then
@@ -1176,10 +1219,10 @@ run_animations = function(m)
         [MARIO_ANIM_DIVE] = function()
             if m.playerIndex == 0 then
                 if m.action == ACT_DIVE then
-                    if e.animState == 1 then
+                    if e.animState == 5 or id == "NOSEDIVE" then
                         id = "NOSEDIVE"
                     elseif (m.pos.y - m.floorHeight > 800 or m.waterLevel > m.floorHeight) and is_anim_at_end(m) ~= 0 and m.vel.y < 20 then
-                        e.animState = 1
+                        e.animState = 5
                     end
                 end
             end
@@ -1257,10 +1300,12 @@ run_animations = function(m)
             animInfo.animAccel = accel
         end
 
+        -- Skip the rolling animations if the fix rolling pivot option is turned off
         if (id == MARIO_ANIM_FORWARD_SPINNING or id == MARIO_ANIM_BACKWARD_SPINNING) and not s.fixRoll then
             return
         end
 
+        -- Set starting frame
         if sPrevId ~= id and m.playerIndex == 0 then
             sPrevId = id
 
@@ -1275,7 +1320,7 @@ run_animations = function(m)
             elseif (id == MARIO_ANIM_RIDING_SHELL or id == MARIO_ANIM_START_RIDING_SHELL) and e.animState == 2 then
                 startFrame = id == MARIO_ANIM_RIDING_SHELL and 19 or 27
             elseif id == "FAR_FALL" then
-                startFrame = 22 -- the reason for this 22 frame start is so that spinning sounds cant play if you fall while triple jumping, for example
+                startFrame = 22 -- The reason for this 22 frame start is so that spinning sounds cant play if you fall while triple jumping, for example
             elseif id == "JUMP_LEFTIE" or id == CHAR_ANIM_COUGHING then
                 startFrame = 1
             end
@@ -1300,6 +1345,7 @@ run_animations = function(m)
             set_mario_action(m, ACT_DEATH_ON_STOMACH, 0)
         end
 
+    -- Override the rolling animations if the fix rolling pivot option is on
     elseif s.fixRoll and (id == MARIO_ANIM_FORWARD_SPINNING or id == MARIO_ANIM_BACKWARD_SPINNING) then
         smlua_anim_util_set_animation(m.marioObj, "MARIO_ANIM_" .. id)
     end

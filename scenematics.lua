@@ -1,3 +1,7 @@
+------------------------------------------
+--------  WORLD DARKENING EFFECT  --------
+------------------------------------------
+
 local SOUND_CUSTOM_STAR_ENV = audio_sample_load("star_twinkle.mp3")
 local STAR_SOUND_DURATION = math.floor(1.2 * 30)
 local sSoundTimer = 0
@@ -5,8 +9,9 @@ local sSoundTimer = 0
 local sCurSkyboxColor = {0xFF, 0xFF, 0xFF}
 local sCurFogColor = {0xFF, 0xFF, 0xFF}
 local sDefaultAmbientColor = {r = 0xFF, g = 0xFF, b = 0xFF}
-gWaitedForLightsOnOtherMods = false
 local sLightIntensities = {}
+
+require "objects/stars"
 
 local ambient_color_is_default = function()
     if (sDefaultAmbientColor.r == 0x7F and sDefaultAmbientColor.g == 0x7F and sDefaultAmbientColor.b == 0x7F) then
@@ -17,7 +22,7 @@ end
 
 local handle_star_env_effects = function()
     local m = gMarioStates[0]
-    local soundSetting = gSGOLocalSettings.twinklyStars
+    local soundSetting = gSGELocalSettings.twinklyStars
 
     if not gWaitedForLightsOnOtherMods then
         gWaitedForLightsOnOtherMods = true
@@ -78,12 +83,15 @@ local handle_star_env_effects = function()
         local behavior = get_id_from_behavior(gNearestStar.behavior)
         local important = is_very_important(gNearestStar)
         local distMax = not important and STAR_ENV_MAX_DIST or IMPORTANT_ENV_MAX_DIST
-        if gNearestStar.activeFlags & ACTIVE_FLAG_DEACTIVATED ~= 0 or sStarDist > distMax then
+        local canBubble = (mario_can_bubble(m) and m.numLives > 0) or m.action == ACT_BUBBLED
+        if gStarDist > distMax then
+            gStarDist = 0
             gNearestStar = nil
+            return
         end
 
         local elegibleForNoise = 3
-        if behavior == starNewID or behavior == grandStarNewID or behavior == celebStarNewID then
+        if behavior == starNewID or behavior == grandStarNewID then
             elegibleForNoise = 0
         elseif behavior == spawnedStarNewID or behavior == spawnedStarNoExitNewID then
             elegibleForNoise = 2
@@ -97,16 +105,14 @@ local handle_star_env_effects = function()
             else
                 sSoundTimer = sSoundTimer + 1
             end
+        end
 
-            local canBubble = (mario_can_bubble(m) and m.numLives > 0) or m.action == ACT_BUBBLED
-
-            if (m.health > 0xFF and gDeathActs[m.action] == nil) or not canBubble then
-                if gLightDarken > 1 then gLightDarken = 1 end
-                local starPos = {x = gNearestStar.oPosX, y = gNearestStar.oPosY, z = gNearestStar.oPosZ}
-                local dist = vec3f_dist(m.pos, starPos)
-                local min = not important and 0.5 or 0.2
-                gLightDarken = approach_f32(gLightDarken, clamp(((dist - (distMax * 0.25)) / (distMax - (distMax * 0.325))), min, 1), 0.0325, 0.0325)
-            end
+        if (m.health > 0xFF and gDeathActs[m.action] == nil) or canBubble then
+            if gLightDarken > 1 then gLightDarken = 1 end
+            local starPos = {x = gNearestStar.oPosX, y = gNearestStar.oPosY, z = gNearestStar.oPosZ}
+            local dist = vec3f_dist(m.pos, starPos)
+            local min = not important and 0.5 or 0.2
+            gLightDarken = approach_f32(gLightDarken, clamp(((dist - (distMax * 0.25)) / (distMax - (distMax * 0.325))), min, 1), 0.0325, 0.0325)
         end
     else
         if sSoundTimer < STAR_SOUND_DURATION then
@@ -121,6 +127,10 @@ local handle_star_env_effects = function()
     end
 end
 
+-------------------------------------------
+--------  DEATH HANDLER FUNCTIONS  --------
+-------------------------------------------
+
 local sPlayedBuzz = false
 
 local SOUND_DEATH_BUZZ = audio_sample_load("death_buzz.mp3")
@@ -131,7 +141,7 @@ gDeathActs = {
     [ACT_STANDING_DEATH] = function(m)
         if gPlayerSyncTable[0].newAnims then
             return m.marioObj.header.gfx.animInfo.animFrame >= 110
-        else 
+        else
             return m.marioObj.header.gfx.animInfo.animFrame >= 90
         end
     end,
@@ -191,7 +201,7 @@ local sSpecialSpotlightTriggers = {
         return m.marioObj.header.gfx.animInfo.animID == CHAR_ANIM_DROWNING_PART2
     end,
     [ACT_SQUISHED] = function(m)
-        return m.actionState == 2 or (m.actionArg >= 300 and not gSGOLocalSettings.miscThings)
+        return m.actionState == 2 or (m.actionArg >= 300 and not gSGELocalSettings.miscThings)
     end,
     [ACT_INTO_ABYSS] = function(m)
         return false
@@ -220,7 +230,7 @@ local handle_death_text = function()
     local prevPos = m.pos.y
     local prevYVel = m.vel.y
     local canBubble = (mario_can_bubble(m) and m.numLives > 0) or m.action == ACT_BUBBLED
-    local tooBad = gSGOLocalSettings.deathScene == 1
+    local tooBad = gSGELocalSettings.deathScene == 1
     local bubba
 
     if m.action == ACT_EATEN_BY_BUBBA then
@@ -238,7 +248,7 @@ local handle_death_text = function()
             if not canBubble and tooBad then
                 hud_hide()
             end
-            if gSGOLocalSettings.deadBuzz then
+            if gSGELocalSettings.deadBuzz then
                 audio_sample_play(SOUND_DEATH_BUZZ, c.pos, 0.5)
             end
             sPlayedBuzz = true
@@ -269,6 +279,10 @@ local handle_death_text = function()
         end
     end
 end
+
+-----------------------------
+--------  CUTSCENES  --------
+-----------------------------
 
 sCamPos = gVec3fZero()
 sFocusPos = gVec3fZero()
@@ -491,7 +505,11 @@ sDeathCutscenes = {
     end
 }
 
-cam_test = function()
+-------------------------
+--------  HOOKS  --------
+-------------------------
+
+local run_custom_cutscenes = function()
     local m = gMarioStates[0]
     local c = m.area.camera
     local l = gLakituState
@@ -504,7 +522,7 @@ cam_test = function()
         z = c.focus.z,
     }
 
-    if c.cutscene == CUTSCENE_SGO_DEATH then
+    if c.cutscene == CUTSCENE_SGE_DEATH then
         switch(m.action, sDeathCutscenes, m)
 
         if sCutsceneTimer < sMaxDuration or sMaxDuration == -1 then
@@ -529,7 +547,7 @@ cam_test = function()
         sCutsceneTimer = 0
         sCutsceneState = 0
         if sDeathCutscenes[m.action] then
-            c.cutscene = CUTSCENE_SGO_DEATH
+            c.cutscene = CUTSCENE_SGE_DEATH
         end
     end
 
@@ -541,14 +559,14 @@ end
 handle_scenematics = function()
     handle_death_text()
     handle_star_env_effects()
-    cam_test()
+    run_custom_cutscenes()
 end
 
 hook_event(HOOK_ON_DEATH, function(m)
     local canBubble = mario_can_bubble(m) and m.numLives > 0
 
     if gDeathTextTimer < DEATH_TEXT_DURATION and (gDeathActs[m.action] ~= nil or m.action == ACT_SQUISHED or m.action == ACT_LAVA_BOOST) and
-    ((not canBubble and gSGOLocalSettings.deathScene <= 2) or
+    ((not canBubble and gSGELocalSettings.deathScene <= 2) or
     ((m.floor.type == SURFACE_DEATH_PLANE or m.floor.type == SURFACE_VERTICAL_WIND) and m.actionTimer < 45)) then
         return false
     end
